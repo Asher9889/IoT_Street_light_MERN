@@ -161,3 +161,64 @@ why still not working even relay lights are on.
 | Grouping          | Group relays by room/floor/zone          |
 | Offline Detection | Flag when a device misses N polls        |
 | Role-based Access | Admin, Operator, Viewer                  |
+
+
+
+# MQTT Protocol
+
+sudo dnf install mosquitto-clients
+
+📦 Required Libraries in Arduino IDE
+Install these via Library Manager:
+
+- TinyGSM
+- PubSubClient
+- ArduinoJson
+
+---
+## 📘 MQTT Full Overview
+
+| Category              | Details                                                                    |
+| --------------------- | -------------------------------------------------------------------------- |
+| **Full Form**         | MQTT = Message Queuing Telemetry Transport                                 |
+| **Type**              | Lightweight Publish/Subscribe Protocol                                     |
+| **Transport Layer**   | TCP (usually port **1883** for non-SSL, **8883** for SSL)                  |
+| **Ideal For**         | IoT, embedded systems, low-bandwidth or unstable networks                  |
+| **Protocol Features** | - Small code footprint<br>- Low power consumption<br>- Real-time messaging |
+| **Broker**            | Central server that manages message routing (e.g., Mosquitto)              |
+| **Client Types**      | Publisher (sends messages) and Subscriber (receives messages)              |
+| **Message Structure** | Topic (e.g., `home/bulb1`) + Payload (e.g., `"ON"`)                        |
+| **QoS Levels**        | 0 (At most once), 1 (At least once), 2 (Exactly once)                      |
+| **Security**          | Username/Password + TLS/SSL                                                |
+| **Popular Brokers**   | Mosquitto, EMQX, HiveMQ, VerneMQ, AWS IoT Core                             |
+| **Client Libraries**  | `paho-mqtt`, `mqtt.js`, `PubSubClient` (ESP8266/ESP32), `async-mqtt`       |
+---
+
+## 🎯 Why Use MQTT Over HTTP
+
+| MQTT Feature                     | HTTP Limitation / Advantage of MQTT                        |
+| -------------------------------- | ---------------------------------------------------------- |
+| **Bi-directional Communication** | HTTP is one-way per request; MQTT allows real-time two-way |
+| **Lightweight**                  | MQTT has lower packet overhead                             |
+| **Faster**                       | No need to open/close connection repeatedly                |
+| **Persistent Session**           | Keeps the connection alive                                 |
+| **Offline Support**              | MQTT can queue messages for delivery later                 |
+| **Low Bandwidth Usage**          | Perfect for GSM or mobile networks                         |
+
+---
+
+## 🛠️ How to Use MQTT (Step-by-Step)
+
+| Step | Description                | Example                                             |
+| ---- | -------------------------- | --------------------------------------------------- |
+| 1    | Install Broker             | `sudo dnf install mosquitto`                        |
+| 2    | Start Broker               | `mosquitto -v`                                      |
+| 3    | Install Client Tools       | `sudo dnf install mosquitto-clients`                |
+| 4    | Subscribe to a Topic       | `mosquitto_sub -h localhost -t home/relay1`         |
+| 5    | Publish a Message          | `mosquitto_pub -h localhost -t home/relay1 -m "ON"` |
+| 6    | Use MQTT Library in ESP32  | Use `PubSubClient` library in Arduino               |
+| 7    | Write ESP32 Code           | Connect to WiFi + MQTT, then publish/subscribe      |
+| 8    | Handle Commands via Topics | Topic: `home/bulbs/1`, Payload: `"ON"` or `"OFF"`   |
+
+
+

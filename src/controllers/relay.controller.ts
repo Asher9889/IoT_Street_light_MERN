@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from "express";
+import { publishBulbStates } from "../utils";
 
 let bulbStates: string[] = Array(10).fill("OFF");
 
@@ -14,6 +15,7 @@ async function updateBulb(req: Request, res: Response, next: NextFunction) {
     }
 
     bulbStates[index] = status;
+    publishBulbStates(bulbStates)   // 🟢 Publish via MQTT
 
     return res.json({ success: true, bulbStates });
 }
