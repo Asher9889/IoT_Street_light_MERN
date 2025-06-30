@@ -1,3 +1,4 @@
+import { register } from "./devices.controller";
 import { getLatestCommand, updateBulb } from "./relay.controller";
 
 const relayController = {
@@ -5,4 +6,8 @@ const relayController = {
     getLatestCommand: getLatestCommand
 }
 
-export { relayController }
+const deviceController = {
+    register: register
+}
+
+export { relayController, deviceController }
