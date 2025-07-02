@@ -1,3 +1,13 @@
+## 🌟 Who is who?
+
+| 📌 Role        | ✅ Who/What acts as this?                                             |
+| -------------- | -------------------------------------------------------------------- |
+| **Publisher**  | 👉 Your Node.js backend — It publishes MQTT messages when API is hit |
+| **Broker**     | 👉 Your MQTT broker (e.g. Mosquitto / HiveMQ) — It routes messages   |
+| **Subscriber** | 👉 The ESP32 device — It listens (subscribes) to its command topic   |
+
+---
+
 ## 📊 IoT System Development Plan (ESP32 + MQTT + Node.js + MongoDB)
 | 🔢 Step | 🧠 Task                       | 🔧 Action / Description                                                                                                                                                                    | 🧱 Tools / Technologies         |
 | ------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------- |
@@ -13,3 +23,16 @@
 | 🔟      | **Security Measures**         | - Secure MQTT (username/password)<br>- Auth for REST API<br>- Device auth (optional)                                                                                                       | TLS, JWT, API keys              |
 | 🔁      | **Scale to 100+ Devices**     | Devices follow same topic pattern, UI/dashboard lists & controls each individually                                                                                                         | MQTT topic hierarchy            |
 | 🧪      | **Test System End-to-End**    | 1. Register device<br>2. Flash ESP32<br>3. Toggle from dashboard<br>4. See relay respond                                                                                                   | Localhost/dev to Live           |
+
+---
+
+🧠 MQTT Architecture Overview (Full Picture)
+
+
+┌────────────┐        ┌─────────────────────────┐       ┌────────────────┐
+│ ESP32 #001 │◄──────►│     MQTT BROKER (Your PC)│◄────►│  Node.js Server │
+└────┬───────┘        └────────────┬────────────┘       └────┬───────────┘
+     │                             │                           │
+     ▼                             ▼                           ▼
+Sub: iot/devices/device001/cmd     DB Save Cmd         Web UI publish msg
+Pub: iot/devices/device001/status        └────── REST API ──────►

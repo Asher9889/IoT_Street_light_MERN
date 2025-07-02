@@ -1,3 +1,4 @@
 import ApiErrorResponse from "./ApiErrorResponse";
+import ApiSuccessResponse from "./ApiSuccessResponse";
 
-export { ApiErrorResponse }
+export { ApiErrorResponse, ApiSuccessResponse }

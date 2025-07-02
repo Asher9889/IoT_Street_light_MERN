@@ -15,7 +15,7 @@ async function updateBulb(req: Request, res: Response, next: NextFunction) {
     }
 
     bulbStates[index] = status;
-    publishBulbStates(bulbStates)   // 🟢 Publish via MQTT
+    // publishBulbStates(bulbStates)   // 🟢 Publish via MQTT
 
     return res.json({ success: true, bulbStates });
 }

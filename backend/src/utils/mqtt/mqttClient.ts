@@ -1,28 +1,52 @@
 import mqtt from 'mqtt';
 
 const mqttBrokerUrl = 'mqtt://broker.hivemq.com';
-const topic = 'home/relays';
+const client = mqtt.connect(mqttBrokerUrl);
 
-
-const client = mqtt.connect(mqttBrokerUrl); // connect to broker
-
+// Handle connection
 client.on('connect', () => {
-  console.log('✅ MQTT connected');
+  console.log('✅ MQTT connected to broker:', mqttBrokerUrl);
 });
 
+// Handle errors
 client.on('error', (err) => {
   console.error('❌ MQTT error:', err);
 });
 
-function publishBulbStates(bulbStates: string[]) {
-  const payload = JSON.stringify(bulbStates);
+// Dynamic publisher
+function publishBulbStates(deviceId: string, bulbStates: string[]) {
+  const topic = `iot/devices/${deviceId}/cmd`;
+  const payload = JSON.stringify({
+    status: bulbStates,
+    timestamp: new Date().toISOString()
+  });
+
   client.publish(topic, payload, {}, (err) => {
     if (err) {
-      console.error('❌ Failed to publish MQTT:', err);
+      console.error(`❌ Failed to publish to ${topic}:`, err);
     } else {
-      console.log('📤 MQTT published:', payload);
+      console.log(`📤 Published to ${topic}:`, payload);
+    }
+  });
+
+  
+}
+
+function publishSingleBulb(deviceId: string, index: number, status: string) {
+  const topic = `iot/devices/${deviceId}/cmd`;
+  const payload = JSON.stringify({
+    index,
+    status,
+    timestamp: new Date().toISOString()
+  });
+
+  client.publish(topic, payload, {}, (err) => {
+    if (err) {
+      console.error(`❌ Failed to publish to ${topic}:`, err);
+    } else {
+      console.log(`📤 Published single bulb to ${topic}:`, payload);
     }
   });
 }
 
-export default publishBulbStates;
+export { publishBulbStates, publishSingleBulb};

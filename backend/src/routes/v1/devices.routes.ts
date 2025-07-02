@@ -9,7 +9,8 @@ const router = express.Router();
 router.post("/register", deviceController.register as any)
 
 // update bulb
-router.post("/update-bulb", relayController.updateBulb as any)
+router.post("/:deviceId/cmd/all", deviceController.updateAllBulb as any)
+router.post("/:deviceId/cmd", deviceController.updateSingleBulb as any)
 
 
 export default router;
