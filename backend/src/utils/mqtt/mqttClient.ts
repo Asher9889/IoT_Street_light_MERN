@@ -1,6 +1,7 @@
 import mqtt from 'mqtt';
+import { config } from '../../config';
 
-const mqttBrokerUrl = 'mqtt://broker.hivemq.com';
+const mqttBrokerUrl = config.mqtt_client
 const client = mqtt.connect(mqttBrokerUrl);
 
 // Handle connection

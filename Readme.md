@@ -36,3 +36,19 @@
      ▼                             ▼                           ▼
 Sub: iot/devices/device001/cmd     DB Save Cmd         Web UI publish msg
 Pub: iot/devices/device001/status        └────── REST API ──────►
+
+
+## 📝 Next steps 
+- Setting up Mosquitto broker on Windows
+     - Download and install on the window server
+          ``` https://mosquitto.org/download/```
+
+- Configure TLS + auth
+
+- Open the broker securely to the world
+
+- Design topic structure + ACLs
+
+- Node.js code for MQTT publish/subscribe
+
+- Web dashboard integration
