@@ -1,3 +1,3 @@
-import config from "./config";
+import { config, devicesConstant } from "./config";
 
-export { config }
+export { config, devicesConstant }

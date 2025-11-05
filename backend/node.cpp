@@ -1,0 +1,266 @@
+/* Node Firmware - backend-driven dynamic
+   - Save as Node.ino
+   - Requires: RTClib, Preferences, LoRa
+*/
+
+#include <Wire.h>
+#include <RTClib.h>
+#include <SPI.h>
+#include <LoRa.h>
+#include <Preferences.h>
+
+#define RELAY_PIN  27
+#define RELAY_ON  LOW
+#define RELAY_OFF HIGH
+
+// LoRa Pins
+#define LORA_SCK  18
+#define LORA_MISO 19
+#define LORA_MOSI 23
+#define LORA_SS   5
+#define LORA_RST  14
+#define LORA_DIO0 26
+
+Preferences preferences;
+RTC_DS3231 rtc;
+
+// Node identity (unique per device)
+const uint8_t NODE_ID = 1; // change per device or set at provisioning
+uint8_t assignedGateway = 0;
+
+// Schedule defaults
+int lightOnHour = 17, lightOnMin = 58;
+int lightOffHour = 6, lightOffMin = 9;
+
+bool prevLightState = false;
+bool prevScheduledLightState = false;
+
+unsigned long lastPeriodicPublish = 0;
+const unsigned long periodicInterval = 300000UL; // 5 min
+unsigned long lastDiscovery = 0;
+const unsigned long DISCOVERY_WINDOW = 15000UL; // 15s discovery
+
+// Packed structs (same as gateway)
+struct __attribute__((packed)) BeaconPkt { uint8_t pktType; uint8_t gatewayId; uint32_t uptime_s; };
+struct __attribute__((packed)) RegisterPkt { uint8_t pktType; uint8_t nodeId; uint8_t fwVersion; uint32_t uptime_s; };
+struct __attribute__((packed)) AssignPkt { uint8_t pktType; uint8_t nodeId; uint8_t gatewayId; };
+struct __attribute__((packed)) ConfigPkt { uint8_t pktType; uint8_t nodeId; uint8_t gatewayId; uint8_t onHour, onMin; uint8_t offHour, offMin; uint8_t cfgVer; };
+struct __attribute__((packed)) PolePacket {
+  uint8_t nodeID;
+  uint8_t gatewayID;
+  bool lightState;
+  bool fault;
+  uint8_t hour;
+  uint8_t minute;
+  int rssi;
+  int snr;
+};
+
+void blink(int ms = 50) {
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(ms);
+  digitalWrite(LED_BUILTIN, LOW);
+}
+
+// persist/load settings
+void loadPreferences() {
+  preferences.begin("light-schedule", true);
+  lightOnHour  = preferences.getInt("onHour", lightOnHour);
+  lightOnMin   = preferences.getInt("onMin", lightOnMin);
+  lightOffHour = preferences.getInt("offHour", lightOffHour);
+  lightOffMin  = preferences.getInt("offMin", lightOffMin);
+  prevLightState = preferences.getBool("lastState", false);
+  assignedGateway = preferences.getUChar("assignedGateway", 0);
+  preferences.end();
+}
+
+void saveAssignedGateway(uint8_t gw) {
+  preferences.begin("light-schedule", false);
+  preferences.putUChar("assignedGateway", gw);
+  preferences.end();
+}
+
+// send Register to gateway (broadcast)
+void sendRegister() {
+  RegisterPkt r;
+  r.pktType = 0x02;
+  r.nodeId = NODE_ID;
+  r.fwVersion = 1;
+  r.uptime_s = millis()/1000;
+  LoRa.beginPacket();
+  LoRa.write((uint8_t*)&r, sizeof(r));
+  LoRa.endPacket();
+  Serial.printf("[LoRa] Sent REGISTER node %d\n", NODE_ID);
+}
+
+// send Status (PolePacket) wrapped with pktType 0x05
+void sendStatus(bool actualLightState) {
+  uint8_t hour=0, minute=0;
+  if (rtc.begin()) {
+    DateTime now = rtc.now();
+    hour = now.hour();
+    minute = now.minute();
+  }
+  // build pole packet
+  PolePacket p;
+  p.nodeID = NODE_ID;
+  p.gatewayID = assignedGateway;
+  p.lightState = actualLightState;
+  p.fault = false;
+  p.hour = hour;
+  p.minute = minute;
+  p.rssi = LoRa.packetRssi();
+  p.snr = LoRa.packetSnr();
+  LoRa.beginPacket();
+  uint8_t t = 0x05;
+  LoRa.write(&t, 1);
+  LoRa.write((uint8_t*)&p, sizeof(p));
+  LoRa.endPacket();
+  Serial.printf(">> Node %d sent status\n", NODE_ID);
+}
+
+// get scheduled light state
+bool getScheduledLightState() {
+  // if RTC not available fallback to false
+  DateTime now;
+  if (!rtc.begin()) return false;
+  now = rtc.now();
+  if (lightOnHour < lightOffHour) {
+    return (now.hour() > lightOnHour || (now.hour() == lightOnHour && now.minute() >= lightOnMin)) &&
+           (now.hour() < lightOffHour || (now.hour() == lightOffHour && now.minute() < lightOffMin));
+  } else {
+    return (now.hour() > lightOnHour || (now.hour() == lightOnHour && now.minute() >= lightOnMin)) ||
+           (now.hour() < lightOffHour || (now.hour() == lightOffHour && now.minute() < lightOffMin));
+  }
+}
+
+void applyConfigFromPacket(const ConfigPkt &cp) {
+  if (cp.nodeId != NODE_ID) return;
+  lightOnHour = cp.onHour;
+  lightOnMin  = cp.onMin;
+  lightOffHour = cp.offHour;
+  lightOffMin  = cp.offMin;
+  // persist
+  preferences.begin("light-schedule", false);
+  preferences.putInt("onHour", lightOnHour);
+  preferences.putInt("onMin", lightOnMin);
+  preferences.putInt("offHour", lightOffHour);
+  preferences.putInt("offMin", lightOffMin);
+  preferences.end();
+  Serial.printf("[Config] Applied schedule %02d:%02d - %02d:%02d\n", lightOnHour, lightOnMin, lightOffHour, lightOffMin);
+}
+
+// LoRa receive handler
+void handleLoRaPacket() {
+  int packetSize = LoRa.parsePacket();
+  if (packetSize <= 0) return;
+  uint8_t pktType = 0;
+  LoRa.readBytes(&pktType, 1);
+
+  if (pktType == 0x01) { // beacon
+    BeaconPkt b;
+    b.pktType = 0x01;
+    LoRa.readBytes(((uint8_t*)&b) + 1, sizeof(b)-1);
+    Serial.printf("[LoRa] Beacon from GW %d\n", b.gatewayId);
+    // if not assigned, send register (so backend can assign)
+    if (assignedGateway == 0) {
+      sendRegister();
+    }
+  } else if (pktType == 0x03) { // ASSIGN
+    AssignPkt ap;
+    ap.pktType = 0x03;
+    LoRa.readBytes(((uint8_t*)&ap) + 1, sizeof(ap)-1);
+    if (ap.nodeId == NODE_ID) {
+      assignedGateway = ap.gatewayId;
+      saveAssignedGateway(assignedGateway);
+      Serial.printf("[LoRa] Assigned to gateway %d\n", assignedGateway);
+      // optionally send immediate status
+      sendStatus(prevLightState);
+    }
+  } else if (pktType == 0x04) { // CONFIG
+    ConfigPkt cp;
+    cp.pktType = 0x04;
+    LoRa.readBytes(((uint8_t*)&cp) + 1, sizeof(cp)-1);
+    if (cp.nodeId == NODE_ID) {
+      applyConfigFromPacket(cp);
+      // optional ack by sending status
+      sendStatus(prevLightState);
+    }
+  } else if (pktType == 0x05) {
+    // ignore, it's node->gateway status type
+    // flush rest
+    while (LoRa.available()) LoRa.read();
+  } else {
+    // unknown
+    while (LoRa.available()) LoRa.read();
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, RELAY_OFF);
+
+  // RTC init
+  Wire.begin(21,22);
+  Wire.setClock(100000);
+  if (!rtc.begin()) {
+    Serial.println("[RTC] not found");
+  } else {
+    if (rtc.lostPower()) rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
+
+  // load preferences
+  loadPreferences();
+
+  // LoRa init
+  LoRa.setPins(LORA_SS, LORA_RST, LORA_DIO0);
+  while (!LoRa.begin(433E6)) {
+    Serial.println("[LoRa] init retry");
+    delay(1000);
+  }
+  Serial.println("[LoRa] init OK");
+
+  // Send initial register if not assigned
+  if (assignedGateway == 0) {
+    Serial.println("[DISCOVER] Trying to discover gateway...");
+    unsigned long start = millis();
+    while (millis() - start < DISCOVERY_WINDOW) {
+      handleLoRaPacket();
+      delay(100);
+    }
+    // after discovery window, if still unassigned, send explicit Register
+    if (assignedGateway == 0) sendRegister();
+  }
+
+  // initial status send
+  prevScheduledLightState = getScheduledLightState();
+  sendStatus(prevLightState);
+  lastPeriodicPublish = millis();
+}
+
+void loop() {
+  handleLoRaPacket();
+
+  unsigned long now = millis();
+  bool scheduled = getScheduledLightState();
+  bool rtcChanged = (scheduled != prevScheduledLightState);
+  prevScheduledLightState = scheduled;
+
+  bool actualLightState;
+  // if scheduled state changed it overrides any earlier command
+  if (rtcChanged) {
+    actualLightState = scheduled;
+  } else {
+    actualLightState = scheduled; // for simplicity; your previous command override logic can be kept
+  }
+
+  digitalWrite(RELAY_PIN, actualLightState ? RELAY_ON : RELAY_OFF);
+
+  if (now - lastPeriodicPublish >= periodicInterval) {
+    lastPeriodicPublish = now;
+    sendStatus(actualLightState);
+  }
+
+  delay(20);
+}

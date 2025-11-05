@@ -1,9 +1,13 @@
 import { NextFunction, Request, Response } from "express";
 import { Device } from "../models";
-import { ApiErrorResponse, publishBulbStates, registerDeviceSchema } from "../utils";
+import { ApiErrorResponse, publishBulbStates, registerDeviceSchema, deviceApiMessage } from "../utils";
 import { StatusCodes } from 'http-status-codes';
 import { ApiSuccessResponse } from "../utils/api-response";
 import { publishSingleBulb } from "../utils/mqtt/mqttClient";
+import { registerGatewaySchema, validateNodeData } from "../validators";
+import validateGatewayData from "../validators/gateway.validator";
+import { deviceService } from "../services";
+
 
 //---------- Register One Pair of Device----->
 async function register(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
@@ -116,4 +120,31 @@ async function updateSingleBulb(req: Request, res: Response, next: NextFunction)
   }
 }
 
-export { register, updateAllBulb, updateSingleBulb }
+async function registerGateway(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+  try {
+    const validatedData = validateGatewayData(req.body);
+    const result = await deviceService.registerGateway(validatedData);
+    return res.status(StatusCodes.OK).json(new ApiSuccessResponse(StatusCodes.OK, `${validatedData.gatewayId} saved successfully`, result))
+  
+  } catch (error: any) {
+    if (error instanceof ApiErrorResponse) {
+      return next(error)
+    }
+    return next(new ApiErrorResponse(StatusCodes.INTERNAL_SERVER_ERROR, error.message));
+  }
+}
+
+async function registerNode(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
+  try {
+    const validatedData = validateNodeData(req.body);
+    const result = await deviceService.registerNode(validatedData);
+    return res.status(StatusCodes.OK).json(new ApiSuccessResponse(StatusCodes.OK, deviceApiMessage.nodeApiMessage.nodeSavedSuccessfully(result.nodeId), result))
+  } catch (error: any) {
+    if (error instanceof ApiErrorResponse) {
+      return next(error)
+    }
+    return next(new ApiErrorResponse(StatusCodes.INTERNAL_SERVER_ERROR, error.message));
+  }
+}
+
+export { register, updateAllBulb, updateSingleBulb, registerGateway, registerNode }

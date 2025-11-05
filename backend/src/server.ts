@@ -1,9 +1,10 @@
-import express, { NextFunction, Request, Response } from "express";
+import express from "express";
 import cors from "cors";
 import apiRoutes from "./routes"
-import { ApiErrorResponse, globalErrorHandler } from "./utils";
+import { globalErrorHandler } from "./utils";
 import { config } from "./config";
 import connectMongoDB from "./db/connectMongoDB";
+
 const app = express();
 
 connectMongoDB();

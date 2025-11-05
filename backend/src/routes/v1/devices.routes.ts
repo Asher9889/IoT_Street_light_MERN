@@ -12,5 +12,11 @@ router.post("/register", deviceController.register as any)
 router.post("/:deviceId/cmd/all", deviceController.updateAllBulb as any)
 router.post("/:deviceId/cmd", deviceController.updateSingleBulb as any)
 
+// register gateway
+router.post("/gateway", deviceController.registerGateway as any)
+
+// register node
+router.post("/node", deviceController.registerNode as any)
+
 
 export default router;

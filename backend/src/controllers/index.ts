@@ -1,4 +1,5 @@
-import { register, updateAllBulb, updateSingleBulb } from "./devices.controller";
+
+import { register, updateAllBulb, updateSingleBulb, registerGateway, registerNode } from "./devices.controller";
 import { getLatestCommand, updateBulb } from "./relay.controller";
 
 const relayController = {
@@ -9,7 +10,9 @@ const relayController = {
 const deviceController = {
     register: register,
     updateAllBulb: updateAllBulb,
-    updateSingleBulb: updateSingleBulb
+    updateSingleBulb: updateSingleBulb,
+    registerGateway: registerGateway,
+    registerNode: registerNode
 }
 
 export { relayController, deviceController }
