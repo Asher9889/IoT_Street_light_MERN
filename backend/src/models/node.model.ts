@@ -3,8 +3,8 @@ import { STATUS, Status } from "../constant";
 
 export interface INode extends Document {
   _id: Types.ObjectId;
-  nodeId: number;
-  gatewayId: number; // ref to Gateway
+  nodeId: string;
+  gatewayId: string; // ref to Gateway
   name: string;
   macAddress: string;
   status: Status;
@@ -22,8 +22,8 @@ export interface INode extends Document {
 
 const NodeSchema = new Schema<INode>(
   {
-    nodeId: { type: Number, required: true},
-    gatewayId: { type: Schema.Types.Number, ref: "Gateway", required: true },
+    nodeId: { type: String, required: true},
+    gatewayId: { type: Schema.Types.String, ref: "Gateway", required: true },
     name: { type: String, required: true },
     macAddress: { type: String, required: true },
     status: {

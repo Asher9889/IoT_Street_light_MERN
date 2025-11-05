@@ -137,6 +137,7 @@ async function registerGateway(req: Request, res: Response, next: NextFunction):
 async function registerNode(req: Request, res: Response, next: NextFunction): Promise<Response | void> {
   try {
     const validatedData = validateNodeData(req.body);
+    validatedData.nodeId = `ND-${validatedData.nodeId}`;
     const result = await deviceService.registerNode(validatedData);
     return res.status(StatusCodes.OK).json(new ApiSuccessResponse(StatusCodes.OK, deviceApiMessage.nodeApiMessage.nodeSavedSuccessfully(result.nodeId), result))
   } catch (error: any) {

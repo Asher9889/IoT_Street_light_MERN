@@ -16,7 +16,7 @@ export async function getNextGatewaySequence(name:string = "gateway"): Promise<n
     }
 }
 
-export async function getNextNodeSequence(gatewayId: number): Promise<number> {
+export async function getNextNodeSequence(gatewayId: string): Promise<number> {
     try {
         const key = `node_gateway_${gatewayId}`;
         const counter = await Counter.findByIdAndUpdate(

@@ -6,15 +6,12 @@ import { StatusCodes } from "http-status-codes";
 
 
 const nodeSchema = Joi.object({
-  nodeId: Joi.number()
-    .integer()
-    .positive()
+  nodeId: Joi.string().optional()
     .messages({
-      "number.base": "nodeId must be a number",
       "any.required": "nodeId is required",
     }),
 
-  gatewayId: Joi.number()
+  gatewayId: Joi.string().required()
     .required()
     .messages({
       "any.required": "gatewayId is required",
@@ -82,9 +79,6 @@ const nodeSchema = Joi.object({
     .messages({
       "string.pattern.base": "firmwareVersion must follow semantic versioning (e.g. 1.0.0)",
     }),
-
-  createdAt: Joi.date().optional(),
-  updatedAt: Joi.date().optional(),
 });
 
 export default function validateNodeData(data: INode) {

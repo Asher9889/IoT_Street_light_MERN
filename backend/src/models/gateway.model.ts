@@ -2,7 +2,7 @@ import mongoose, { Document, Schema, Types, Model } from "mongoose";
 import { Status, STATUS } from "../constant";
 
 export interface IGateway extends Document {
-  gatewayId: number;
+  gatewayId: String;
   macAddress: string;
   name: string;
   status: Status;
@@ -23,13 +23,13 @@ export interface IGateway extends Document {
     apn: string;
     ipAddress: string;
   };
-  assignedNodes: Types.ObjectId[];
+  assignedNodes: string[];
   configVersion: string;
 }
 
 const GatewaySchema = new Schema<IGateway>(
   {
-    gatewayId: { type: Number, required: true },
+    gatewayId: { type: String, required: true },
     macAddress: { type: String, required: true },
     name: { type: String, required: true },
     status: { type: String, enum: [STATUS.OFFLINE, STATUS.ONLINE], default: STATUS.OFFLINE },
@@ -55,9 +55,9 @@ const GatewaySchema = new Schema<IGateway>(
     },
 
     assignedNodes: {
-      type: [{ type: Schema.Types.ObjectId, ref: "Node" }],
+      type: [{ type: String, ref: "Node" }],
       validate: {
-        validator: function (val: Types.ObjectId[]) {
+        validator: function (val: string[]) {
           return !val || val.length <= 50;
         },
         message: "A gateway cannot have more than 50 assigned nodes.",

@@ -14,7 +14,7 @@ export async function registerGateway(data:IGateway){
       }
       const validNodeIds = await validateAssignedNodes(data.assignedNodes);
       const nextSequence = await getNextGatewaySequence();
-      data.gatewayId = nextSequence;
+      data.gatewayId = `GW-${nextSequence}`;
       data.assignedNodes = validNodeIds;
       const result = await new Gateway(data).save();
       if (!result._id) {
@@ -29,7 +29,7 @@ export async function registerGateway(data:IGateway){
 
 export async function registerNode(data:INode){
     try {
-      const isExists = await Node.findOne({ $or: [{ nodeId: data.nodeId }, { macAddress: data.macAddress }] }).lean();
+    const isExists = await Node.findOne({ $or: [{ nodeId: data.nodeId }, { macAddress: data.macAddress }] }).lean();
     if (isExists) {
       throw new ApiErrorResponse(StatusCodes.BAD_REQUEST, `${data.nodeId, data.macAddress} is already registered.`)
     }
@@ -38,7 +38,7 @@ export async function registerNode(data:INode){
       throw new ApiErrorResponse(StatusCodes.BAD_REQUEST, deviceApiMessage.gatewayApiMessage.gatewayNotExists(data.gatewayId))
     }
     const nextSequence = await getNextNodeSequence(data.gatewayId);
-    data.nodeId = nextSequence;
+    data.nodeId = `ND-${nextSequence}`;
     if (gateway.assignedNodes.length >= devicesConstant.MAX_NODE_LIMIT) {
       throw new ApiErrorResponse(StatusCodes.BAD_REQUEST, deviceApiMessage.nodeApiMessage.limitExceeded(data.gatewayId))
     }  

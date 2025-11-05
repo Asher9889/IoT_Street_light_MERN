@@ -58,8 +58,8 @@ const registerGatewaySchema = Joi.object({
 
   network: Joi.object({
     simIccid: Joi.string().required(),
-    apn: Joi.string().required(),
-    ipAddress: Joi.string().required(),
+    apn: Joi.string().optional(),
+    ipAddress: Joi.string().optional(),
   }).required(),
   configVersion: Joi.string().required(),
 });
