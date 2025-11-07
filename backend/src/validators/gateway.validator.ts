@@ -61,7 +61,8 @@ const registerGatewaySchema = Joi.object({
     apn: Joi.string().optional(),
     ipAddress: Joi.string().optional(),
   }).required(),
-  configVersion: Joi.string().required(),
+  configVersion: Joi.string().optional(),
+  firmwareVersion: Joi.string().optional(),
 });
 
 export default function validateGatewayData(gatewayData: IGateway) {

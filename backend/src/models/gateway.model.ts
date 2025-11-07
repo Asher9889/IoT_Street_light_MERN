@@ -25,6 +25,7 @@ export interface IGateway extends Document {
   };
   assignedNodes: string[];
   configVersion: string;
+  firmwareVersion?: string;
 }
 
 const GatewaySchema = new Schema<IGateway>(
@@ -65,7 +66,8 @@ const GatewaySchema = new Schema<IGateway>(
     },
 
 
-    configVersion: { type: String, default: "v1" },
+    configVersion: { type: String },
+    firmwareVersion: { type: String },
   },
   {
     timestamps: true, // automatically manages createdAt and updatedAt

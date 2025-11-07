@@ -1,9 +1,9 @@
 import { NextFunction, Request, Response } from "express";
 import { Device } from "../models";
-import { ApiErrorResponse, publishBulbStates, registerDeviceSchema, deviceApiMessage } from "../utils";
+import { ApiErrorResponse,  registerDeviceSchema, deviceApiMessage } from "../utils";
 import { StatusCodes } from 'http-status-codes';
 import { ApiSuccessResponse } from "../utils/api-response";
-import { publishSingleBulb } from "../utils/mqtt/mqttClient";
+// import { publishSingleBulb } from "../utils/mqtt/mqttClient";
 import { registerGatewaySchema, validateNodeData } from "../validators";
 import validateGatewayData from "../validators/gateway.validator";
 import { deviceService } from "../services";
@@ -71,7 +71,7 @@ async function updateAllBulb(req: Request, res: Response, next: NextFunction): P
 
     await device.save();
 
-    publishBulbStates(deviceId, status);
+    // publishBulbStates(deviceId, status);
     return res.status(StatusCodes.OK).json(new ApiSuccessResponse(StatusCodes.OK, "Successfully updated the bulb", status));
 
   } catch (error: any) {
@@ -108,7 +108,7 @@ async function updateSingleBulb(req: Request, res: Response, next: NextFunction)
     device.lastSeen = new Date();
     await device.save();
 
-    publishSingleBulb(deviceId, index, status);
+    // publishSingleBulb(deviceId, index, status);
 
     return res.status(StatusCodes.OK).json(new ApiSuccessResponse(StatusCodes.OK, "Bulb updated", { index, status }));
   } catch (error: any) {
@@ -147,5 +147,7 @@ async function registerNode(req: Request, res: Response, next: NextFunction): Pr
     return next(new ApiErrorResponse(StatusCodes.INTERNAL_SERVER_ERROR, error.message));
   }
 }
+
+
 
 export { register, updateAllBulb, updateSingleBulb, registerGateway, registerNode }

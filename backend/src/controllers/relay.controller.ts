@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { publishBulbStates } from "../utils";
+// import { publishBulbStates } from "../utils";
 
 let bulbStates: string[] = Array(10).fill("OFF");
 

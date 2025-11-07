@@ -1,0 +1,1 @@
+export { IGatewayRegisterMessage, GatewayMessageType } from "./gateway.interface";
