@@ -14,7 +14,7 @@ const GatewayLogSchema = new Schema<IGatewayLog>({
   event: { type: String, required: true },
   message: { type: String, required: true },
   timestamp: { type: Date, default: Date.now },
-});
+},);
 
 const GatewayLog = mongoose.model<IGatewayLog>("GatewayLog", GatewayLogSchema);
 

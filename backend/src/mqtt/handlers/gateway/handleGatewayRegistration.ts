@@ -5,12 +5,10 @@ import { GatewayMessageType } from "../../interfaces/gateway.interface";
 
 async function handleGatewayRegistration(payload: Buffer) {
     try {
-        console.log("payload is:", payload)
         if (!payload) return;
         let data:IGatewayRegisterMessage | GatewayMessageType.DEVICE_OFFLINE;
 
         if (payload.toString() === GatewayMessageType.DEVICE_OFFLINE) {
-            console.info("device is offline")
             return
         }
         data = JSON.parse(payload.toString()) as IGatewayRegisterMessage;
@@ -29,6 +27,8 @@ async function handleGatewayRegistration(payload: Buffer) {
             message: "Gateway registered successfully",
             timestamp: new Date(),
         })
+
+        return gateway.gatewayId as string;
     } catch (error:any) {
         console.error(error.message);
         throw error;

@@ -106,25 +106,28 @@ struct __attribute__((packed)) BeaconPkt {
 };
 struct __attribute__((packed)) RegisterPkt {
   uint8_t pktType; // 0x02
-  uint8_t nodeId;  // node's request id (may be 0 if node unassigned)
+  char nodeId[24];            // 16 chars + null
   uint8_t fwVersion;
   uint32_t uptime_s;
 };
 struct __attribute__((packed)) AssignPkt {
   uint8_t pktType; // 0x03
-  uint8_t nodeId;
+  char nodeId[24];            // 16 chars + null
   // gatewayId may be implied; using numeric small id not used here because nodes use simple local nodeId
 };
 struct __attribute__((packed)) ConfigPkt {
-  uint8_t pktType; // 0x04
-  uint8_t nodeId;
-  uint8_t onHour, onMin;
-  uint8_t offHour, offMin;
+  uint8_t pktType;            // 0x04
+  char nodeId[24];            // 16 chars + null
+  char gatewayId[24];         // 16 chars + null (optional)
+  uint8_t onHour;
+  uint8_t onMin;
+  uint8_t offHour;
+  uint8_t offMin;
   uint8_t cfgVer;
 };
 struct __attribute__((packed)) PolePacket {
-  uint8_t nodeID;
-  uint8_t gatewayID; // set by gateway when forwarding to backend
+  char nodeId[24];            // 16 chars + null
+  char gatewayId[24];         // 16 chars + null (optional)
   bool lightState;
   bool fault;
   uint8_t hour;
@@ -148,21 +151,6 @@ String getDeviceId() {
 }
 
 // ---------------- Storage: save/load JSON config ----------------
-bool saveConfigToSPIFFS(const JsonDocument &doc) {
-  File f = SPIFFS.open(CONFIG_PATH, FILE_WRITE);
-  if (!f) {
-    Serial.println("[SPIFFS] open for write failed");
-    return false;
-  }
-  if (serializeJson(doc, f) == 0) {
-    Serial.println("[SPIFFS] serialize failed");
-    f.close();
-    return false;
-  }
-  f.close();
-  Serial.println("[SPIFFS] config saved");
-  return true;
-}
 
 bool loadConfigFromSPIFFS() {
   if (!SPIFFS.exists(CONFIG_PATH)) {
@@ -223,139 +211,227 @@ bool loadConfigFromSPIFFS() {
 }
 
 // ---------------- MQTT callback ----------------
-void onMqttMessage(char* topic, byte* payload, unsigned int length) {
+// void onMqttMessage(char* topic, byte* payload, unsigned int length) {
+//   String t = String(topic);
+//   String msg;
+//   msg.reserve(length + 1);
+//   for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
+
+//   Serial.printf("[MQTT] %s -> %s\n", t.c_str(), msg.c_str());
+
+//   // 1) Device-level config (during bootstrap)
+//   if (t == topic_device_config_set) {
+//     // Backend sent config for deviceId (bootstrap reply)
+//     StaticJsonDocument<4096> doc;
+//     DeserializationError err = deserializeJson(doc, msg);
+//     if (err) {
+//       Serial.println("[MQTT] invalid device config JSON");
+//       return;
+//     }
+//     // Expect backend to include gatewayId in the payload. If not, backend can return partial config; handle defensively.
+//     String gw = String(doc["gatewayId"] | "");
+//     if (gw == "") {
+//       Serial.println("[MQTT] device config missing gatewayId, ignoring");
+//       return;
+//     }
+//     // Save and apply
+//     if (saveConfigToSPIFFS(doc)) {
+//       loadConfigFromSPIFFS();
+//       // after saving, switch to gateway topic base; confirm online
+//       mqtt.publish(topic_gateway_status.c_str(), "{\"type\":\"status\",\"status\":\"ONLINE\"}", true);
+//       Serial.println("[MQTT] Bootstrap config applied and persisted.");
+//     }
+//     return;
+//   }
+
+//   // 2) Gateway-level config update
+//   if (GATEWAY_ID.length() > 0 && t == topic_gateway_config_set) {
+//     StaticJsonDocument<4096> doc;
+//     DeserializationError err = deserializeJson(doc, msg);
+//     if (err) {
+//       Serial.println("[MQTT] invalid gateway config JSON");
+//       return;
+//     }
+//     int newVersion = doc["configVersion"] | 0;
+//     if (newVersion <= configVersion) {
+//       Serial.println("[MQTT] Received config with older or same version; skipping");
+//       return;
+//     }
+//     if (saveConfigToSPIFFS(doc)) {
+//       if (loadConfigFromSPIFFS()) {
+//         configVersion = newVersion;
+//       }
+//     }
+//     return;
+//   }
+
+//   // 3) Assignment messages - backend instructs gateway to assign a node locally (over LoRa)
+//   if (GATEWAY_ID.length() > 0 && t == topic_gateway_node_assign) {
+//     StaticJsonDocument<256> doc;
+//     DeserializationError err = deserializeJson(doc, msg);
+//     if (err) {
+//       Serial.println("[MQTT] invalid assignment JSON");
+//       return;
+//     }
+//     const char* type = doc["type"] | "";
+//     if (strcmp(type, "assign_node") == 0) {
+//       uint8_t nodeId = doc["nodeId"] | 0;
+//       // send ASSIGN packet over LoRa (AssignPkt)
+//       AssignPkt ap;
+//       ap.pktType = 0x03;
+//       ap.nodeId = nodeId;
+//       LoRa.beginPacket();
+//       LoRa.write((uint8_t*)&ap, sizeof(ap));
+//       LoRa.endPacket();
+//       blinkDataLED(100);
+//     }
+//     return;
+//   }
+
+//   // 4) Node-specific config sent by backend to gateway (gateway should forward to node)
+//   if (GATEWAY_ID.length() > 0 && t == topic_gateway_node_config) {
+//     StaticJsonDocument<256> doc;
+//     DeserializationError err = deserializeJson(doc, msg);
+//     if (err) {
+//       Serial.println("[MQTT] invalid node config JSON");
+//       return;
+//     }
+//     uint8_t nodeId = doc["nodeId"] | 0;
+//     uint8_t onHour = doc["config"]["onHour"] | 0;
+//     uint8_t onMin = doc["config"]["onMin"] | 0;
+//     uint8_t offHour = doc["config"]["offHour"] | 0;
+//     uint8_t offMin = doc["config"]["offMin"] | 0;
+//     uint8_t cfgVer = doc["configVersion"] | 0;
+//     // pack and send LoRa ConfigPkt
+//     ConfigPkt cp;
+//     cp.pktType = 0x04;
+//     cp.nodeId = nodeId;
+//     cp.onHour = onHour; cp.onMin = onMin;
+//     cp.offHour = offHour; cp.offMin = offMin;
+//     cp.cfgVer = cfgVer;
+//     LoRa.beginPacket();
+//     LoRa.write((uint8_t*)&cp, sizeof(cp));
+//     LoRa.endPacket();
+//     blinkDataLED(100);
+//     return;
+//   }
+
+//   // 5) Control commands (reboot, reset, ota)
+//   if (GATEWAY_ID.length() > 0 && t == topic_gateway_control) {
+//     StaticJsonDocument<256> doc;
+//     DeserializationError err = deserializeJson(doc, msg);
+//     if (err) {
+//       Serial.println("[MQTT] invalid control JSON");
+//       return;
+//     }
+//     const char* cmd = doc["cmd"] | "";
+//     if (strcmp(cmd, "reboot") == 0) {
+//       mqtt.publish(topic_gateway_status.c_str(), "{\"type\":\"status\",\"status\":\"REBOOTING\"}", true);
+//       delay(500);
+//       ESP.restart();
+//     } else if (strcmp(cmd, "reset_config") == 0) {
+//       if (SPIFFS.exists(CONFIG_PATH)) SPIFFS.remove(CONFIG_PATH);
+//       mqtt.publish(topic_gateway_status.c_str(), "{\"type\":\"status\",\"status\":\"CONFIG_RESET\"}", true);
+//     } else if (strcmp(cmd, "reboot_radio") == 0) {
+//       LoRa.end();
+//       delay(200);
+//       LoRa.begin(LORA_FREQUENCY);
+//       mqtt.publish(topic_gateway_status.c_str(), "{\"type\":\"status\",\"status\":\"RADIO_REBOOTED\"}", true);
+//     }
+//     return;
+//   }
+
+//   // otherwise ignore unknown topics
+//   Serial.println("[MQTT] Unhandled topic");
+// }
+
+// helper: extract component between tokens, e.g. topic = "iot/gateway/GW1/node/node123/config/set"
+// returns node id (token index 4, zero-based) -> "node123"
+String extractnodeIdFromTopic(const char* topic) {
+  // split by '/'
   String t = String(topic);
-  String msg;
-  msg.reserve(length + 1);
-  for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
-
-  Serial.printf("[MQTT] %s -> %s\n", t.c_str(), msg.c_str());
-
-  // 1) Device-level config (during bootstrap)
-  if (t == topic_device_config_set) {
-    // Backend sent config for deviceId (bootstrap reply)
-    StaticJsonDocument<4096> doc;
-    DeserializationError err = deserializeJson(doc, msg);
-    if (err) {
-      Serial.println("[MQTT] invalid device config JSON");
-      return;
-    }
-    // Expect backend to include gatewayId in the payload. If not, backend can return partial config; handle defensively.
-    String gw = String(doc["gatewayId"] | "");
-    if (gw == "") {
-      Serial.println("[MQTT] device config missing gatewayId, ignoring");
-      return;
-    }
-    // Save and apply
-    if (saveConfigToSPIFFS(doc)) {
-      loadConfigFromSPIFFS();
-      // after saving, switch to gateway topic base; confirm online
-      mqtt.publish(topic_gateway_status.c_str(), "{\"type\":\"status\",\"status\":\"ONLINE\"}", true);
-      Serial.println("[MQTT] Bootstrap config applied and persisted.");
-    }
-    return;
-  }
-
-  // 2) Gateway-level config update
-  if (GATEWAY_ID.length() > 0 && t == topic_gateway_config_set) {
-    StaticJsonDocument<4096> doc;
-    DeserializationError err = deserializeJson(doc, msg);
-    if (err) {
-      Serial.println("[MQTT] invalid gateway config JSON");
-      return;
-    }
-    int newVersion = doc["configVersion"] | 0;
-    if (newVersion <= configVersion) {
-      Serial.println("[MQTT] Received config with older or same version; skipping");
-      return;
-    }
-    if (saveConfigToSPIFFS(doc)) {
-      if (loadConfigFromSPIFFS()) {
-        configVersion = newVersion;
+  int parts = 0;
+  int start = 0;
+  for (int i = 0; i < t.length(); ++i) {
+    if (t[i] == '/') {
+      // token from start..i-1
+      ++parts;
+      if (parts == 4) { // 0:iot 1:gateway 2:<gatewayId> 3:node 4:<nodeId>
+        int nextSlash = t.indexOf('/', i+1);
+        if (nextSlash == -1) nextSlash = t.length();
+        return t.substring(i+1, nextSlash);
       }
     }
-    return;
   }
-
-  // 3) Assignment messages - backend instructs gateway to assign a node locally (over LoRa)
-  if (GATEWAY_ID.length() > 0 && t == topic_gateway_node_assign) {
-    StaticJsonDocument<256> doc;
-    DeserializationError err = deserializeJson(doc, msg);
-    if (err) {
-      Serial.println("[MQTT] invalid assignment JSON");
-      return;
-    }
-    const char* type = doc["type"] | "";
-    if (strcmp(type, "assign_node") == 0) {
-      uint8_t nodeId = doc["nodeId"] | 0;
-      // send ASSIGN packet over LoRa (AssignPkt)
-      AssignPkt ap;
-      ap.pktType = 0x03;
-      ap.nodeId = nodeId;
-      LoRa.beginPacket();
-      LoRa.write((uint8_t*)&ap, sizeof(ap));
-      LoRa.endPacket();
-      blinkDataLED(100);
-    }
-    return;
-  }
-
-  // 4) Node-specific config sent by backend to gateway (gateway should forward to node)
-  if (GATEWAY_ID.length() > 0 && t == topic_gateway_node_config) {
-    StaticJsonDocument<256> doc;
-    DeserializationError err = deserializeJson(doc, msg);
-    if (err) {
-      Serial.println("[MQTT] invalid node config JSON");
-      return;
-    }
-    uint8_t nodeId = doc["nodeId"] | 0;
-    uint8_t onHour = doc["config"]["onHour"] | 0;
-    uint8_t onMin = doc["config"]["onMin"] | 0;
-    uint8_t offHour = doc["config"]["offHour"] | 0;
-    uint8_t offMin = doc["config"]["offMin"] | 0;
-    uint8_t cfgVer = doc["configVersion"] | 0;
-    // pack and send LoRa ConfigPkt
-    ConfigPkt cp;
-    cp.pktType = 0x04;
-    cp.nodeId = nodeId;
-    cp.onHour = onHour; cp.onMin = onMin;
-    cp.offHour = offHour; cp.offMin = offMin;
-    cp.cfgVer = cfgVer;
-    LoRa.beginPacket();
-    LoRa.write((uint8_t*)&cp, sizeof(cp));
-    LoRa.endPacket();
-    blinkDataLED(100);
-    return;
-  }
-
-  // 5) Control commands (reboot, reset, ota)
-  if (GATEWAY_ID.length() > 0 && t == topic_gateway_control) {
-    StaticJsonDocument<256> doc;
-    DeserializationError err = deserializeJson(doc, msg);
-    if (err) {
-      Serial.println("[MQTT] invalid control JSON");
-      return;
-    }
-    const char* cmd = doc["cmd"] | "";
-    if (strcmp(cmd, "reboot") == 0) {
-      mqtt.publish(topic_gateway_status.c_str(), "{\"type\":\"status\",\"status\":\"REBOOTING\"}", true);
-      delay(500);
-      ESP.restart();
-    } else if (strcmp(cmd, "reset_config") == 0) {
-      if (SPIFFS.exists(CONFIG_PATH)) SPIFFS.remove(CONFIG_PATH);
-      mqtt.publish(topic_gateway_status.c_str(), "{\"type\":\"status\",\"status\":\"CONFIG_RESET\"}", true);
-    } else if (strcmp(cmd, "reboot_radio") == 0) {
-      LoRa.end();
-      delay(200);
-      LoRa.begin(LORA_FREQUENCY);
-      mqtt.publish(topic_gateway_status.c_str(), "{\"type\":\"status\",\"status\":\"RADIO_REBOOTED\"}", true);
-    }
-    return;
-  }
-
-  // otherwise ignore unknown topics
-  Serial.println("[MQTT] Unhandled topic");
+  return String("");
 }
+
+void handleNodeConfig(const JsonDocument& doc, const char* topic) {
+  ConfigPkt pkt;
+  pkt.pktType = 0x04;
+
+  // get nodeId from payload (preferred)
+  const char* nodeIdPayload = doc["nodeId"] | "";
+  String nodeIdStr = nodeIdPayload;
+  if (nodeIdStr.length() == 0) {
+    // fallback: extract from topic (since we subscribed to node/+/config/set)
+    nodeIdStr = extractnodeIdFromTopic(topic);
+  }
+  // safe copy - ensure null termination
+  strncpy(pkt.nodeId, nodeIdStr.c_str(), sizeof(pkt.nodeId)-1);
+  pkt.nodeId[sizeof(pkt.nodeId)-1] = '\0';
+
+  // gatewayId may be present
+  const char* gw = doc["gatewayId"] | "";
+  strncpy(pkt.gatewayId, gw, sizeof(pkt.gatewayId)-1);
+  pkt.gatewayId[sizeof(pkt.gatewayId)-1] = '\0';
+
+  // schedule
+  pkt.onHour = doc["schedule"]["onHour"] | 0;
+  pkt.onMin  = doc["schedule"]["onMin"]  | 0;
+  pkt.offHour = doc["schedule"]["offHour"] | 0;
+  pkt.offMin  = doc["schedule"]["offMin"] | 0;
+  pkt.cfgVer  = doc["configVersion"] | 1;
+
+  // send over LoRa (binary)
+  LoRa.beginPacket();
+  LoRa.write((uint8_t*)&pkt, sizeof(pkt));
+  LoRa.endPacket();
+
+  Serial.printf("[GATEWAY] Forwarded config to node %s (from topic %s)\n", pkt.nodeId, topic);
+}
+
+
+void onMqttMessage(char* topic, byte* payload, unsigned int length) {
+  StaticJsonDocument<512> doc;
+  if (deserializeJson(doc, payload, length)) {
+    Serial.println("[MQTT] Invalid JSON received");
+    return;
+  }
+
+  const char* type = doc["type"] | "";
+
+  if (!type) {
+    Serial.println("[MQTT] Missing type field");
+    return;
+  }
+
+  if (strcmp(type, "node_config") == 0) {
+    handleNodeConfig(doc, topic);
+  } 
+  else if (strcmp(type, "firmware_update") == 0) {
+    // handleFirmwareUpdate(doc, topic);
+  } 
+  else if (strcmp(type, "gateway_reboot") == 0) {
+    // handleGatewayReboot(doc);
+  } 
+  else {
+    Serial.printf("[MQTT] Unknown message type: %s\n", type);
+  }
+}
+
+
+
 
 // ---------------- MQTT connect (supports bootstrap by deviceId if gatewayId not present) ----------------
 bool mqttConnect() {
@@ -409,7 +485,7 @@ bool mqttConnect() {
 }
 
 // ---------------- Publish node registration (forward from LoRa node to backend) ----------------
-void publishNodeRegister(uint8_t nodeId, int rssi, float snr) {
+void publishNodeRegister(char* nodeId, int rssi, float snr) {
   StaticJsonDocument<256> doc;
   doc["type"] = "node_register";
   doc["deviceId"] = deviceIdStr;
@@ -453,7 +529,7 @@ void handleLoRaReceive() {
     PolePacket pkt;
     // here we assume full PolePacket follows
     LoRa.readBytes((uint8_t*)&pkt, sizeof(pkt));
-                  pkt.nodeID, pkt.lightState ? "ON" : "OFF",
+                  pkt.nodeId, pkt.lightState ? "ON" : "OFF",
                   pkt.fault ? "YES" : "NO",
                   pkt.hour, pkt.minute,
                   pkt.rssi, pkt.snr;
@@ -463,7 +539,7 @@ void handleLoRaReceive() {
     doc["type"] = "node_status";
     doc["deviceId"] = deviceIdStr;
     doc["gatewayId"] = GATEWAY_ID;
-    doc["nodeId"] = pkt.nodeID;
+    doc["nodeId"] = pkt.nodeId;
     doc["state"] = pkt.lightState ? "ON":"OFF";
     doc["fault"] = pkt.fault;
     doc["time"] = String(pkt.hour) + ":" + String(pkt.minute);
@@ -472,8 +548,8 @@ void handleLoRaReceive() {
     String s; serializeJson(doc, s);
 
     String topic;
-    if (GATEWAY_ID.length() > 0) topic = String("iot/gateway/") + GATEWAY_ID + "/node/" + String(pkt.nodeID) + "/status";
-    else topic = String("iot/gateway/") + deviceIdStr + "/node/" + String(pkt.nodeID) + "/status";
+    if (GATEWAY_ID.length() > 0) topic = String("iot/gateway/") + GATEWAY_ID + "/node/" + String(pkt.nodeId) + "/status";
+    else topic = String("iot/gateway/") + deviceIdStr + "/node/" + String(pkt.nodeId) + "/status";
 
     mqtt.publish(topic.c_str(), s.c_str());
     blinkDataLED();

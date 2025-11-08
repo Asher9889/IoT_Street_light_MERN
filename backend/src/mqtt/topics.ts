@@ -1,5 +1,5 @@
 import { getMQTTClient } from "./client";
-import { handleGatewayRegistration } from "./index";
+import { handleGatewayConfigSet, handleGatewayRegistration } from "./index";
 
 export function subscribeGatewayTopics() {
   const client = getMQTTClient();
@@ -13,12 +13,14 @@ export function subscribeGatewayTopics() {
   });
 
   // Handle messages
-  client.on("message", (topic, message:Buffer) => {
+  client.on("message", async (topic, message:Buffer) => {
     if (topic.match(/^iot\/gateway\/.+\/register$/)) {
       try {
         // TODO: find existing gateway in DB & send config
-        handleGatewayRegistration(message);
-
+        const gatewayId = await handleGatewayRegistration(message);
+        if(!gatewayId) return;
+        // Send config to all nodes
+        await handleGatewayConfigSet(gatewayId);
       } catch (e) {
         console.error("[MQTT] Invalid JSON payload:", e);
       }
