@@ -201,7 +201,7 @@ bool loadConfigFromSPIFFS() {
     topic_gateway_config_set = backendGatewayTopicBase + "config/set";
     topic_gateway_config_get = backendGatewayTopicBase + "config/get";
     topic_gateway_node_assign = backendGatewayTopicBase + "node/assign";
-    topic_gateway_node_config = backendGatewayTopicBase + "node/config";
+    topic_gateway_node_config = backendGatewayTopicBase + "node/+/config/set"; // to subscribe all the node specific topics
     topic_gateway_status = backendGatewayTopicBase + "status";
     topic_gateway_control = backendGatewayTopicBase + "control";
   }
