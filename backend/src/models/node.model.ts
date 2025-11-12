@@ -14,6 +14,10 @@ export interface INode extends Document {
     offHour: number;
     powerLimit: number;
   };
+  rssi?: number;
+  snr?: number;
+  lastConfigAck?: Date;
+  configVersion?: number;
   fault: boolean;
   firmwareVersion: string;
   createdAt: Date;
@@ -22,10 +26,10 @@ export interface INode extends Document {
 
 const NodeSchema = new Schema<INode>(
   {
-    nodeId: { type: String, required: true},
+    nodeId: { type: String, required: true, unique: true},
     gatewayId: { type: Schema.Types.String, ref: "Gateway", required: true },
     name: { type: String, required: true },
-    macAddress: { type: String, required: true },
+    macAddress: { type: String, required: true, unique: true },
     status: {
       type: String,
       enum: Object.values(STATUS), // ["ONLINE", "OFFLINE"]
@@ -33,10 +37,14 @@ const NodeSchema = new Schema<INode>(
     },
     lastSeen: { type: Date, default: null },
     config: {
-      onHour: { type: Number, required: true },
-      offHour: { type: Number, required: true },
-      powerLimit: { type: Number, required: true },
+      onHour: { type: Number, required: true, default: 18 },
+      offHour: { type: Number, required: true, default: 6 },
+      powerLimit: { type: Number, required: true, default: 80 }
     },
+    rssi: { type: Number, default: null },
+    snr: { type: Number, default: null },
+    lastConfigAck: { type: Date, default: null },
+    configVersion: { type: Number, default: null },
     fault: { type: Boolean, default: false },
     firmwareVersion: { type: String, required: true },
   },

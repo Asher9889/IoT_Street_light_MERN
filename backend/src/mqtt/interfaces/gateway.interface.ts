@@ -1,9 +1,12 @@
 export enum GatewayMessageType {
   DEVICE_REGISTER = "device_register",
+  DEVICE_CONFIG = "device_config",
   HEARTBEAT = "heartbeat",
   SENSOR_DATA = "sensor_data",
   CONFIG_ACK = "config_ack",
   DEVICE_OFFLINE = "OFFLINE",
+  DEVICE_TELEMETRY = "telemetry",
+  NODE_REGISTER = "node_register",
 }
 
 export interface IGatewayBase {

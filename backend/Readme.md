@@ -234,3 +234,12 @@ Install these via Library Manager:
  │    ├── lora_txrx.cpp
  │    └── lora_packets.h
  └── config.h
+
+
+GATEWAy Subs Topic:
+
+iot/gateway/<gatewayId>/config/set
+iot/gateway/<gatewayId>/node/assign
+iot/gateway/<gatewayId>/node/+/config/set
+iot/gateway/<gatewayId>/control
+

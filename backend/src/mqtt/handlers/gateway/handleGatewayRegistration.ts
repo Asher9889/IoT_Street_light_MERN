@@ -12,9 +12,9 @@ async function handleGatewayRegistration(payload: Buffer) {
             return
         }
         data = JSON.parse(payload.toString()) as IGatewayRegisterMessage;
-        const gateway = await Gateway.findOne({ macAddress: data.deviceId });
+        const gateway = await Gateway.findOne({ macAddress: data.deviceId }).lean();
         if(!gateway) return;
-        await gateway.updateOne({_id: gateway._id},{
+        await Gateway.updateOne({_id: gateway._id},{
             $set: {
                 lastSeen: new Date(),
                 firmwareVersion: data.firmwareVersion,
@@ -24,7 +24,7 @@ async function handleGatewayRegistration(payload: Buffer) {
         await GatewayLog.create({
             gatewayId: gateway.gatewayId,
             event: GatewayMessageType.DEVICE_REGISTER,
-            message: "Gateway registered successfully",
+            message: "Gateway bootstraped successfully",
             timestamp: new Date(),
         })
 

@@ -69,6 +69,10 @@ const nodeSchema = Joi.object({
     .messages({
       "any.required": "config is required",
     }),
+  rssi: Joi.number().optional().allow(null),
+  snr: Joi.number().optional().allow(null),
+  lastConfigAck: Joi.date().optional().allow(null),
+  configVersion: Joi.number().optional().allow(null),
 
   fault: Joi.boolean().default(false),
 
