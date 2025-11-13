@@ -6,13 +6,9 @@ import { StatusCodes } from "http-status-codes";
 
 
 const nodeSchema = Joi.object({
-  nodeId: Joi.string().optional()
-    .messages({
-      "any.required": "nodeId is required",
-    }),
+  nodeId: Joi.string().optional(),
 
   gatewayId: Joi.string().required()
-    .required()
     .messages({
       "any.required": "gatewayId is required",
     }),
@@ -46,40 +42,51 @@ const nodeSchema = Joi.object({
     onHour: Joi.number()
       .min(0)
       .max(23)
-      .required()
+      .default(16)
       .messages({
         "number.base": "onHour must be a number (0–23)",
       }),
     offHour: Joi.number()
       .min(0)
       .max(23)
-      .required()
+      .default(6)
       .messages({
         "number.base": "offHour must be a number (0–23)",
       }),
     powerLimit: Joi.number()
       .positive()
       .max(10000)
-      .required()
+      .default(80)
       .messages({
         "number.base": "powerLimit must be a number",
       }),
-  })
-    .required()
+  }).default()
     .messages({
       "any.required": "config is required",
-    }),
-  rssi: Joi.number().optional().allow(null),
-  snr: Joi.number().optional().allow(null),
-  lastConfigAck: Joi.date().optional().allow(null),
-  configVersion: Joi.number().optional().allow(null),
+    }), 
 
-  fault: Joi.boolean().default(false),
+  intervals: Joi.object({
+    register: Joi.number()
+      .positive()
+      .default(600000), // seconds 10 mins
+    status: Joi.number()
+      .positive()
+      .default(60000), // seconds 1 min
+  }).default()
+    .messages({
+      "any.required": "intervals is required",
+    }),
+  rssi: Joi.number().allow(null).default(null),
+  snr: Joi.number().allow(null).default(null),
+  lastConfigAck: Joi.date().allow(null).default(null),
+  configVersion: Joi.number().allow(null).default(null),
+
+  fault: Joi.boolean().allow(null).default(false),
 
   firmwareVersion: Joi.string()
     .trim()
     .pattern(/^v?\d+\.\d+(\.\d+)?$/)
-    .required()
+    .default("1.0.0")
     .messages({
       "string.pattern.base": "firmwareVersion must follow semantic versioning (e.g. 1.0.0)",
     }),
@@ -87,9 +94,8 @@ const nodeSchema = Joi.object({
 
 export default function validateNodeData(data: INode) {
   const { error, value } = nodeSchema.validate(data);
-  if(error){
+  if (error) {
     throw new ApiErrorResponse(StatusCodes.BAD_REQUEST, error.message)
-   }
-   return value;
+  }
+  return value;
 }
-  

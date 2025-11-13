@@ -33,6 +33,10 @@ async function publishNodeConfig(node: INode, gatewayId: string) {
       offHour: node.config.offHour,
       offMin: 0,
     },
+    intervals: {
+    register: 10 * 60 * 1000, // 10 min
+    status: 1 * 60 * 1000     // 1 min
+  },
     configVersion: 1,
   };
 

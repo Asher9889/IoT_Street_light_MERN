@@ -243,3 +243,11 @@ iot/gateway/<gatewayId>/node/assign
 iot/gateway/<gatewayId>/node/+/config/set
 iot/gateway/<gatewayId>/control
 
+
+iot/gateway/<gatewayId>/node/<nodeId>/control : Control the light
+payload: {
+  "type": "node_control",
+  "gatewayId": "GW-4",
+  "nodeId": "nodeCC29490B65F4",
+  "action": "ON"
+}

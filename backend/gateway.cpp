@@ -104,6 +104,8 @@ String topic_gateway_node_config; // iot/gateway/<gatewayId>/node/+/config/set (
 String topic_gateway_status;      // iot/gateway/<gatewayId>/status
 String topic_gateway_control;     // iot/gateway/<gatewayId>/control
 String topic_generic_register = "iot/gateway/register"; // global backend listen
+String topic_node_control; // iot/gateway/<gatewayId>/node/+/control
+
 
 // ---------------- Packed structs used over LoRa (compact binary packets) ----------------
 struct __attribute__((packed)) BeaconPkt {
@@ -129,6 +131,8 @@ struct __attribute__((packed)) ConfigPkt {
   uint8_t offHour;
   uint8_t offMin;
   uint8_t cfgVer;
+  uint32_t regIntervalMs;
+  uint32_t statusIntervalMs;
 };
 struct __attribute__((packed)) PolePacket {
   char nodeId[24];
@@ -144,6 +148,12 @@ struct __attribute__((packed)) AckPkt {
   uint8_t pktType;   // 0x06
   char nodeId[24];
   uint8_t cfgVer;
+};
+struct __attribute__((packed)) ControlPkt {
+  uint8_t pktType; // 0x07
+  char nodeId[24];
+  char gatewayId[24];
+  bool lightOn;
 };
 struct __attribute__((packed)) LoRaConfigPkt {
   uint8_t pktType;  // 0x08
@@ -241,6 +251,7 @@ bool loadConfigFromSPIFFS() {
     topic_gateway_node_config = backendGatewayTopicBase + "node/+/config/set";
     topic_gateway_status = backendGatewayTopicBase + "status";
     topic_gateway_control = backendGatewayTopicBase + "control";
+    topic_node_control = backendGatewayTopicBase + "node/+/control";
   }
 
   Serial.printf("[CONFIG] loaded gatewayId=%s nodes=%d freq=%lu broker=%s:%d\n",
@@ -299,6 +310,9 @@ void handleNodeConfig(const JsonDocument& doc, const char* topic) {
   pkt.offHour = doc["schedule"]["offHour"] | 0;
   pkt.offMin  = doc["schedule"]["offMin"] | 0;
   pkt.cfgVer  = doc["configVersion"] | 1;
+  pkt.regIntervalMs = doc["intervals"]["register"] | 600000;     // fallback 10 min
+  pkt.statusIntervalMs = doc["intervals"]["status"] | 60000;   // fallback 1 min
+
 
   // send over LoRa (binary)
   LoRa.beginPacket();
@@ -347,6 +361,33 @@ void handleDeviceConfig(const JsonDocument& doc, const char* topic) {
   Serial.printf("[BOOTSTRAP] Config applied successfully for gateway %s\n", GATEWAY_ID.c_str());
 }
 
+void controlNode(const JsonDocument& doc) {
+  const char* nodeId = doc["nodeId"] | "";
+  const char* gwId = doc["gatewayId"] | "";
+  const char* action = doc["action"] | "";
+
+  if (!nodeId[0] || !gwId[0] || !action[0]) {
+    Serial.println("[GATEWAY] Invalid control payload");
+    return;
+  }
+
+  bool lightOn = strcmp(action, "ON") == 0;
+
+  ControlPkt pkt;
+  pkt.pktType = 0x07;
+  strncpy(pkt.nodeId, nodeId, sizeof(pkt.nodeId) - 1);
+  pkt.nodeId[sizeof(pkt.nodeId) - 1] = '\0';
+  strncpy(pkt.gatewayId, gwId, sizeof(pkt.gatewayId) - 1);
+  pkt.gatewayId[sizeof(pkt.gatewayId) - 1] = '\0';
+  pkt.lightOn = lightOn;
+
+  LoRa.beginPacket();
+  LoRa.write((uint8_t*)&pkt, sizeof(pkt));
+  LoRa.endPacket();
+
+  Serial.printf("[GATEWAY] Control command sent to %s -> %s\n", nodeId, lightOn ? "ON" : "OFF");
+}
+
 void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   StaticJsonDocument<2048> doc;
   DeserializationError err = deserializeJson(doc, payload, length);
@@ -368,7 +409,10 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
     handleDeviceConfig(doc, topic);
   } else if (strcmp(type, "gateway_reboot") == 0) {
     // optional: implement
-  } else {
+  } else if (strcmp(type, "node_control") == 0) {
+    controlNode(doc);
+}
+  else {
     Serial.printf("[MQTT] Unknown message type: %s\n", type);
   }
 }
@@ -395,6 +439,7 @@ bool mqttConnect() {
       mqtt.subscribe(topic_gateway_node_assign.c_str());
       mqtt.subscribe(topic_gateway_node_config.c_str());
       mqtt.subscribe(topic_gateway_control.c_str());
+      mqtt.subscribe(topic_node_control.c_str());
 
       StaticJsonDocument<256> doc;
       doc["type"] = "status";

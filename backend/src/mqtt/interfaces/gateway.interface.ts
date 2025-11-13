@@ -7,6 +7,7 @@ export enum GatewayMessageType {
   DEVICE_OFFLINE = "OFFLINE",
   DEVICE_TELEMETRY = "telemetry",
   NODE_REGISTER = "node_register",
+  NODE_CONTROL = "node_control",
 }
 
 export interface IGatewayBase {

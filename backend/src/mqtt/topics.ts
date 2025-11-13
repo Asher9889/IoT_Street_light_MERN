@@ -52,6 +52,7 @@ export function subscribeGatewayTopics() {
       return;
     }
 
+    // --- Node config ack --- 
     if (parts.includes("node") && action === "ack") {
       await handleNodeAck(topic, message);
       return;
