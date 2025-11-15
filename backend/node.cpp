@@ -42,10 +42,17 @@ bool lightState = false;
 unsigned long lastStatus = 0;
 unsigned long lastRegister = 0;
 unsigned long REGISTER_INTERVAL = 30 * 1000UL;     // 30s (initial bootstrap)
-unsigned long STATUS_INTERVAL = 1 * 60 * 1000UL;   // 5 min (default)
-unsigned long RE_REGISTER_INTERVAL = 4 * 60 * 1000UL; // 30 min
+unsigned long STATUS_INTERVAL = 1 * 60 * 1000UL;   // default 60s
+unsigned long RE_REGISTER_INTERVAL = 10 * 60 * 1000UL; // 4 min (example)
 
 bool configured = false; // persisted state
+
+enum ControlMode {
+  AUTO = 0,          // Follows RTC schedule
+  MANUAL_ON = 1,     // Forced ON via remote
+  MANUAL_OFF = 2     // Forced OFF via remote
+};
+ControlMode controlMode = AUTO;
 
 // ---------------- LoRa radio parameters ----------------
 uint32_t LORA_FREQUENCY = DEFAULT_LORA_FREQ;
@@ -68,8 +75,8 @@ struct __attribute__((packed)) ConfigPkt {
   uint8_t onHour, onMin;
   uint8_t offHour, offMin;
   uint8_t cfgVer;
-  uint32_t regIntervalMs;     // new (optional backend-driven)
-  uint32_t statusIntervalMs;  // new (optional backend-driven)
+  uint32_t regIntervalMs;     // (optional backend-driven)
+  uint32_t statusIntervalMs;  // (optional backend-driven)
 };
 
 struct __attribute__((packed)) PolePacket {
@@ -104,36 +111,78 @@ String getDeviceId() {
   return "node" + String(id);
 }
 
+void persistModeAndState() {
+  preferences.begin("node-config", false);
+  preferences.putInt("mode", (int)controlMode);
+  preferences.putBool("lightState", lightState);
+  preferences.end();
+}
+
+// ---------------- SEND ANY PACKET – ALWAYS RETURN TO RX ----------------
+volatile bool isLoRaBusy = false;  // global TX flag
+
+void sendLoRaPacket(const uint8_t* data, size_t len, bool silent = false) {
+  if (isLoRaBusy) {
+    Serial.println("[WARN] LoRa TX requested while busy, skipping...");
+    return;
+  }
+
+  isLoRaBusy = true;  // mark TX in progress
+  LoRa.idle();        // ensure chip ready for TX
+  LoRa.beginPacket();
+  LoRa.write(data, len);
+  LoRa.endPacket();
+  delay(200);          // let TX complete fully
+
+  LoRa.receive();     // re-enable RX mode
+  if (!silent) Serial.println("[LORA] Back to RX mode");
+  isLoRaBusy = false; // TX complete
+}
+
 // ---------------- Persistent Config ----------------
 void loadPreferences() {
-  preferences.begin("node-config", true);
+  preferences.begin("node-config", true); // read-only
   lightOnHour = preferences.getInt("onHour", lightOnHour);
+  lightOnMin  = preferences.getInt("onMin", lightOnMin);
   lightOffHour = preferences.getInt("offHour", lightOffHour);
+  lightOffMin  = preferences.getInt("offMin", lightOffMin);
+
+  // keep previous API usage of getULong in case you still set those keys elsewhere
   REGISTER_INTERVAL = preferences.getULong("registerInt", REGISTER_INTERVAL);
   STATUS_INTERVAL = preferences.getULong("statusInt", STATUS_INTERVAL);
+
   ASSIGNED_GATEWAY = preferences.getString("gatewayId", "");
   configured = preferences.getBool("configured", false);
+
+  // load persisted mode & lightState
+  int modeInt = preferences.getInt("mode", (int)AUTO);
+  controlMode = (ControlMode)modeInt;
+  lightState = preferences.getBool("lightState", lightState);
+
   preferences.end();
 
-  Serial.printf("[CONFIG] Loaded prefs: on=%02d off=%02d regInt=%lus statusInt=%lus gateway=%s configured=%d\n",
-                lightOnHour, lightOffHour,
+  Serial.printf("[CONFIG] Loaded prefs: on=%02d:%02d off=%02d:%02d regInt=%lus statusInt=%lus gateway=%s configured=%d mode=%d lightState=%d\n",
+                lightOnHour, lightOnMin, lightOffHour, lightOffMin,
                 REGISTER_INTERVAL / 1000, STATUS_INTERVAL / 1000,
-                ASSIGNED_GATEWAY.c_str(), configured);
+                ASSIGNED_GATEWAY.c_str(), configured, (int)controlMode, lightState);
 }
 
 void saveConfig(uint8_t onH, uint8_t onM, uint8_t offH, uint8_t offM, const char* gw) {
   preferences.begin("node-config", false);
   preferences.putInt("onHour", onH);
+  preferences.putInt("onMin", onM);
   preferences.putInt("offHour", offH);
+  preferences.putInt("offMin", offM);
   preferences.putString("gatewayId", gw);
   preferences.putBool("configured", true);
+  // don't overwrite mode/lightState here; use persistModeAndState()
   preferences.end();
 }
 
 // ---------------- Core Functions ----------------
 void applyConfig(const ConfigPkt& cfg) {
   lightOnHour = cfg.onHour;
-  lightOnMin = cfg.onMin;
+  lightOnMin  = cfg.onMin;
   lightOffHour = cfg.offHour;
   lightOffMin = cfg.offMin;
   ASSIGNED_GATEWAY = String(cfg.gatewayId);
@@ -150,6 +199,10 @@ void applyConfig(const ConfigPkt& cfg) {
 
   configured = true;
 
+  // When gateway sends schedule/config, return to AUTO mode (explicit, predictable)
+  controlMode = AUTO;
+  persistModeAndState();
+
   // Send ACK
   AckPkt ack;
   ack.pktType = 0x06;
@@ -157,9 +210,7 @@ void applyConfig(const ConfigPkt& cfg) {
   ack.nodeId[sizeof(ack.nodeId) - 1] = '\0';
   ack.cfgVer = cfg.cfgVer;
 
-  LoRa.beginPacket();
-  LoRa.write((uint8_t*)&ack, sizeof(ack));
-  LoRa.endPacket();
+  sendLoRaPacket((uint8_t*)&ack, sizeof(ack));
   Serial.printf("[NODE] Sent ACK for cfgVer=%d\n", ack.cfgVer);
 }
 
@@ -170,21 +221,33 @@ void sendRegister() {
   pkt.nodeId[sizeof(pkt.nodeId) - 1] = '\0';
   pkt.fwVersion = 1;
   pkt.uptime_s = millis() / 1000;
-
-  LoRa.beginPacket();
-  LoRa.write((uint8_t*)&pkt, sizeof(pkt));
-  LoRa.endPacket();
-
+  sendLoRaPacket((uint8_t*)&pkt, sizeof(pkt));
   Serial.printf("[NODE] Register sent: %s\n", pkt.nodeId);
 }
+
+// void sendStatus() {
+//   DateTime now = rtc.now();
+//   PolePacket pkt;
+//   strncpy(pkt.nodeId, NODE_ID.c_str(), sizeof(pkt.nodeId) - 1);
+//   pkt.nodeId[sizeof(pkt.nodeId) - 1] = '\0';
+//   strncpy(pkt.gatewayId, ASSIGNED_GATEWAY.c_str(), sizeof(pkt.gatewayId) - 1);
+//   pkt.gatewayId[sizeof(pkt.gatewayId) - 1] = '\0';
+//   pkt.lightState = lightState;
+//   pkt.fault = false;
+//   pkt.hour = now.hour();
+//   pkt.minute = now.minute();
+//   pkt.rssi = 0;
+//   pkt.snr = 0;
+
+//   sendLoRaPacket((uint8_t*)&pkt, sizeof(pkt))
+//   Serial.printf("[NODE] Status sent: %s @ %02d:%02d (mode=%d)\n", pkt.nodeId, pkt.hour, pkt.minute, (int)controlMode);
+// }
 
 void sendStatus() {
   DateTime now = rtc.now();
   PolePacket pkt;
-  strncpy(pkt.nodeId, NODE_ID.c_str(), sizeof(pkt.nodeId) - 1);
-  pkt.nodeId[sizeof(pkt.nodeId) - 1] = '\0';
-  strncpy(pkt.gatewayId, ASSIGNED_GATEWAY.c_str(), sizeof(pkt.gatewayId) - 1);
-  pkt.gatewayId[sizeof(pkt.gatewayId) - 1] = '\0';
+  strncpy(pkt.nodeId, NODE_ID.c_str(), sizeof(pkt.nodeId)-1);
+  strncpy(pkt.gatewayId, ASSIGNED_GATEWAY.c_str(), sizeof(pkt.gatewayId)-1);
   pkt.lightState = lightState;
   pkt.fault = false;
   pkt.hour = now.hour();
@@ -192,21 +255,44 @@ void sendStatus() {
   pkt.rssi = 0;
   pkt.snr = 0;
 
-  LoRa.beginPacket();
-  LoRa.write(0x05); // status type
-  LoRa.write((uint8_t*)&pkt, sizeof(pkt));
-  LoRa.endPacket();
-
-  Serial.printf("[NODE] Status sent: %s @ %02d:%02d\n", pkt.nodeId, pkt.hour, pkt.minute);
+  // Build full packet: [0x05] + PolePacket
+  uint8_t buffer[1 + sizeof(PolePacket)] = {0};
+  buffer[0] = 0x05;
+  memcpy(buffer + 1, &pkt, sizeof(PolePacket));
+  sendLoRaPacket(buffer, sizeof(buffer));
+  Serial.printf("[NODE] Status sent: %s @ %02d:%02d (mode=%d)\n",
+                pkt.nodeId, pkt.hour, pkt.minute, (int)controlMode);
 }
+// ---------------- Control packet handling ----------------
+// void controlPacket(uint8_t pktType) {
+//   ControlPkt ctrl;
+//   ctrl.pktType = pktType;
 
+//   // Read remaining bytes from LoRa buffer
+//   LoRa.readBytes(((uint8_t*)&ctrl) + 1, sizeof(ctrl) - 1);
 
+//   // Validate target node
+//   if (strncmp(ctrl.nodeId, NODE_ID.c_str(), sizeof(ctrl.nodeId)) != 0) {
+//     Serial.printf("[NODE] Ignoring control for %s (I am %s)\n", ctrl.nodeId, NODE_ID.c_str());
+//     return;
+//   }
 
-void controlPacket(uint8_t pktType) {
+//   // Apply manual override (persisted). Manual overrides take precedence over schedule.
+//   lightState = ctrl.lightOn;
+//   controlMode = (ctrl.lightOn ? MANUAL_ON : MANUAL_OFF);
+
+//   digitalWrite(RELAY_PIN, lightState ? RELAY_ON : RELAY_OFF);
+//   Serial.printf("[NODE] Light turned %s by gateway command (mode set=%d)\n", lightState ? "ON" : "OFF", (int)controlMode);
+
+//   // Persist the manual override and last state
+//   persistModeAndState();
+
+//   // Optional: send immediate status report back to gateway
+//   sendStatus();
+// }
+void controlPacket(uint8_t firstByte) {
   ControlPkt ctrl;
-  ctrl.pktType = pktType;
-
-  // Read remaining bytes from LoRa buffer
+  ctrl.pktType = firstByte;
   LoRa.readBytes(((uint8_t*)&ctrl) + 1, sizeof(ctrl) - 1);
 
   // Validate target node
@@ -215,23 +301,37 @@ void controlPacket(uint8_t pktType) {
     return;
   }
 
-  // Execute control action
+  // Apply manual override (persisted). Manual overrides take precedence over schedule.
   lightState = ctrl.lightOn;
-  digitalWrite(RELAY_PIN, lightState ? RELAY_ON : RELAY_OFF);
-  Serial.printf("[NODE] Light turned %s by gateway command\n", lightState ? "ON" : "OFF");
+  controlMode = (ctrl.lightOn ? MANUAL_ON : MANUAL_OFF);
 
-  // Optional: send immediate status report back to gateway
-  sendStatus();
+  digitalWrite(RELAY_PIN, lightState ? RELAY_ON : RELAY_OFF);
+  Serial.printf("[NODE] Light turned %s by gateway command (mode set=%d)\n", lightState ? "ON" : "OFF", (int)controlMode);
+
+  persistModeAndState();
+
+  // SEND ACK (THIS WAS MISSING)
+  //delay(350); // so that gateway can return to RX mode
+  AckPkt ack;
+  ack.pktType = 0x06;
+  strncpy(ack.nodeId, NODE_ID.c_str(), sizeof(ack.nodeId)-1);
+  ack.nodeId[sizeof(ack.nodeId)-1] = '\0';
+  ack.cfgVer = 0;
+  sendLoRaPacket((uint8_t*)&ack, sizeof(ack));
+  Serial.println("[NODE] ACK sent for CONTROL");
+
+  // // Also send status after ack (optional)
+  // delay(30);
+  // sendStatus();
 }
 
-// ---------------- LoRa Handling ----------------
 
+// ---------------- LoRa Handling ----------------
 void handleLoRaReceive() {
   int packetSize = LoRa.parsePacket();
   if (packetSize <= 0) return;
 
-  uint8_t pktType = 0;
-  LoRa.readBytes(&pktType, 1);
+  uint8_t pktType = LoRa.read();
 
   if (pktType == 0x04) { // Config packet
     ConfigPkt cfg;
@@ -244,16 +344,17 @@ void handleLoRaReceive() {
     applyConfig(cfg);
   } else if (pktType == 0x07) { // ControlPkt
     controlPacket(pktType);
-  }
-
-
-  else {
+  } else {
+    // other packets: flush
     while (LoRa.available()) LoRa.read();
   }
 }
 
 // ---------------- Light Control ----------------
 void updateLightState() {
+  // Only honor schedule when in AUTO mode
+  if (controlMode != AUTO) return;
+
   DateTime now = rtc.now();
   bool shouldBeOn = false;
 
@@ -265,7 +366,10 @@ void updateLightState() {
   if (shouldBeOn != lightState) {
     lightState = shouldBeOn;
     digitalWrite(RELAY_PIN, lightState ? RELAY_ON : RELAY_OFF);
-    Serial.printf("[NODE] Light turned %s\n", lightState ? "ON" : "OFF");
+    Serial.printf("[NODE] Light turned %s (auto)\n", lightState ? "ON" : "OFF");
+
+    // persist last state (still in AUTO)
+    persistModeAndState();
   }
 }
 
@@ -292,7 +396,7 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
   Serial.println("\n=== Node Boot ===");
-
+  Serial.printf("PolePacket size: %d\n", sizeof(PolePacket));
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, RELAY_OFF);
 
@@ -301,6 +405,10 @@ void setup() {
 
   loadPreferences();
   if (!rtc.begin()) Serial.println("[RTC] Not found");
+
+  // Apply persisted physical state immediately (avoid blink)
+  digitalWrite(RELAY_PIN, lightState ? RELAY_ON : RELAY_OFF);
+  Serial.printf("[NODE] Restored physical lightState=%d mode=%d\n", lightState, (int)controlMode);
 
   LoRa.setPins(LORA_SS, LORA_RST, LORA_DIO0);
   applyLoRaParamsAndStart();
@@ -327,23 +435,22 @@ void loop() {
       sendRegister();
     }
   } else {
-    // re-register every 30 min to maintain link
-    if (now - lastRegister > RE_REGISTER_INTERVAL) {
-      lastRegister = now;
-      sendRegister();
-      Serial.println("[NODE] Periodic re-registration to maintain link");
-    }
-  }
+  //   // periodic re-register to maintain link
+  //   if (now - lastRegister > RE_REGISTER_INTERVAL) {
+  //     lastRegister = now;
+  //     sendRegister();
+  //     Serial.println("[NODE] Periodic re-registration to maintain link");
+  //   }
+  // }
 
-  if (now - lastStatus > STATUS_INTERVAL) {
-    lastStatus = now;
-    if (configured && !ASSIGNED_GATEWAY.isEmpty()) {
-      sendStatus();
-    } else {
-      Serial.println("[NODE] Skipping status — not yet configured");
-    }
+  // if (now - lastStatus > STATUS_INTERVAL) {
+  //   lastStatus = now;
+  //   if (configured && !ASSIGNED_GATEWAY.isEmpty()) {
+  //     sendStatus();
+  //   } else {
+  //     Serial.println("[NODE] Skipping status — not yet configured");
+  //   }
   }
-
 
   delay(100);
 }

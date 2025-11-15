@@ -1,5 +1,6 @@
 import mongoose, { Schema, Document, Model, Types } from "mongoose";
 import { STATUS, Status } from "../constant";
+import { MODE, Mode  } from "../constant";  // mode => type
 
 export interface INode extends Document {
   _id: Types.ObjectId;
@@ -18,6 +19,7 @@ export interface INode extends Document {
     register: number;
     status: number;
   };
+  mode: Mode // type
   rssi?: number;
   snr?: number;
   lastConfigAck?: Date;
@@ -49,6 +51,7 @@ const NodeSchema = new Schema<INode>(
       register: { type: Number, default: 600000 },   // 10 minutes
       status: { type: Number, default: 60000 }      // 1 minutes
     },
+    mode: { type: String, enum: Object.values(MODE), default: MODE.AUTO },
     rssi: { type: Number, default: null },
     snr: { type: Number, default: null },
     lastConfigAck: { type: Date, default: null },

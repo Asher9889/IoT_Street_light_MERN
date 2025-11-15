@@ -251,3 +251,11 @@ payload: {
   "nodeId": "nodeCC29490B65F4",
   "action": "ON"
 }
+
+# Flow to control node light
+| Step                  | Direction | Topic                                            | Payload                                                                                                  | Effect                                                                                                |
+| --------------------- | --------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| **Backend → Gateway** | MQTT      | `iot/gateway/GW-4/node/nodeCC29490B65F4/control` | `{ "type":"node_control","gatewayId":"GW-4","nodeId":"nodeCC29490B65F4","action":"ON","mode":"MANUAL" }` | Gateway sends LoRa `pktType=0x07` → node turns light **ON**, mode=MANUAL_ON                           |
+| **Backend → Gateway** | MQTT      | same                                             | `{ "action":"OFF","mode":"MANUAL" }`                                                                     | Gateway sends `pktType=0x07` → node turns light **OFF**, mode=MANUAL_OFF                              |
+| **Backend → Gateway** | MQTT      | same                                             | `{ "action":"AUTO","mode":"AUTO" }`                                                                      | Gateway sends `pktType=0x07` with `lightOn=false` → node switches to AUTO mode (resumes RTC schedule) |
+

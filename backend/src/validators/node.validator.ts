@@ -1,5 +1,5 @@
 import Joi from "joi";
-import { STATUS } from "../constant";
+import { MODE, STATUS } from "../constant";
 import { INode } from "../models";
 import { ApiErrorResponse } from "../utils";
 import { StatusCodes } from "http-status-codes";
@@ -76,6 +76,10 @@ const nodeSchema = Joi.object({
     .messages({
       "any.required": "intervals is required",
     }),
+
+  mode: Joi.string()
+    .valid(...Object.values(MODE))
+    .default(MODE.AUTO),
   rssi: Joi.number().allow(null).default(null),
   snr: Joi.number().allow(null).default(null),
   lastConfigAck: Joi.date().allow(null).default(null),
