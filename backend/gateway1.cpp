@@ -176,21 +176,6 @@ struct __attribute__((packed)) LoRaConfigPkt {
   uint8_t cr;
 };
 
-struct PendingCommand {
-  uint16_t cmdId;
-  char     nodeId[24];
-  bool     lightOn;
-
-  unsigned long lastSend;  // millis of last TX
-  uint8_t attempts;        // how many times sent
-  bool active;             // has a valid command
-  bool done;               // completed (ACKed or failed)
-};
-
-PendingCommand cmdQueue[MAX_PENDING];
-int currentCmdIndex = -1;
-uint16_t nextCmdId = 1;
-
 // ---------------- Helpers ----------------
 void blinkDataLED(int duration = 50) {
   digitalWrite(LED_DATA, HIGH);
@@ -284,20 +269,20 @@ void applyLoRaParamsAndStart() {
 }
 
 // ---------------- Command queue (NEW LOGIC) ----------------
-// struct PendingCommand {
-//   uint16_t cmdId;
-//   char     nodeId[24];
-//   bool     lightOn;
+struct PendingCommand {
+  uint16_t cmdId;
+  char     nodeId[24];
+  bool     lightOn;
 
-//   unsigned long lastSend;  // millis of last TX
-//   uint8_t attempts;        // how many times sent
-//   bool active;             // has a valid command
-//   bool done;               // completed (ACKed or failed)
-// };
+  unsigned long lastSend;  // millis of last TX
+  uint8_t attempts;        // how many times sent
+  bool active;             // has a valid command
+  bool done;               // completed (ACKed or failed)
+};
 
-// PendingCommand cmdQueue[MAX_PENDING];
-// int currentCmdIndex = -1;
-// uint16_t nextCmdId = 1;
+PendingCommand cmdQueue[MAX_PENDING];
+int currentCmdIndex = -1;
+uint16_t nextCmdId = 1;
 
 void initPendingQueue() {
   for (int i = 0; i < MAX_PENDING; i++) {
