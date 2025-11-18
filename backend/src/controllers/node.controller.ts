@@ -7,15 +7,15 @@ import { ApiSuccessResponse } from "../utils/api-response";
 
 async function controlNode(req: Request, res: Response, next: NextFunction): Promise<Response | void>{
     try {
-        const { gatewayId, nodeId, action } = req.body;
+        const { gatewayId, nodeId, action, cmdId, mode } = req.body;
 
-        ["gatewayId", "nodeId", "action"].forEach((key) => {
+        ["gatewayId", "nodeId", "action", "cmdId", "mode"].forEach((key) => {
             if(!req.body[key]){
                 throw new ApiErrorResponse(StatusCodes.BAD_REQUEST, `Please provide valid ${key}`);
             }
         })
 
-        await nodeService.controlNode({ gatewayId, nodeId, action });
+        await nodeService.controlNode({ gatewayId, nodeId, action, cmdId, mode });
 
         return res.status(StatusCodes.OK).json(new ApiSuccessResponse(StatusCodes.OK, "Command send to node successfully"));
         

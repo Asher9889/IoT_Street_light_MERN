@@ -12,7 +12,8 @@ export function controlNode(nodeData: IControlNode){
         gatewayId,
         nodeId,
         action,
-        mode: MODE.MANUAL // AUTO, MANUAL        
+        mode: MODE.MANUAL,
+        cmdId: nodeData.cmdId  // AUTO, MANUAL        
         // for auto
         // "action": "AUTO",
         // "mode": "AUTO" */

@@ -283,21 +283,50 @@ void applyLoRaParamsAndStart() {
                 (unsigned long)LORA_FREQUENCY, LORA_SF, (unsigned long)LORA_BW, LORA_CR);
 }
 
+// ---- ACK event bus (ring buffer) ----
+struct AckEvent {
+  uint16_t cmdId;
+  char     nodeId[24];
+  bool     success;  // true = matched a PendingCommand, false = stale/unmatched
+};
+
+const uint8_t ACK_QUEUE_SIZE = 8;
+AckEvent ackQueue[ACK_QUEUE_SIZE];
+uint8_t ackHead = 0;  // next to read
+uint8_t ackTail = 0;  // next to write
+
+bool ackQueueIsEmpty() {
+  return ackHead == ackTail;
+}
+
+bool ackQueueIsFull() {
+  return ((ackTail + 1) % ACK_QUEUE_SIZE) == ackHead;
+}
+
+void pushAckEvent(uint16_t cmdId, const char* nodeId, bool success) {
+  if (ackQueueIsFull()) {
+    Serial.println("[ACKQ] Queue full, dropping ACK event");
+    return;
+  }
+
+  AckEvent &e = ackQueue[ackTail];
+  e.cmdId = cmdId;
+  e.success = success;
+  memset(e.nodeId, 0, sizeof(e.nodeId));
+  strncpy(e.nodeId, nodeId, sizeof(e.nodeId) - 1);
+
+  ackTail = (ackTail + 1) % ACK_QUEUE_SIZE;
+}
+
+bool popAckEvent(AckEvent &out) {
+  if (ackQueueIsEmpty()) return false;
+  out = ackQueue[ackHead];
+  ackHead = (ackHead + 1) % ACK_QUEUE_SIZE;
+  return true;
+}
+
+
 // ---------------- Command queue (NEW LOGIC) ----------------
-// struct PendingCommand {
-//   uint16_t cmdId;
-//   char     nodeId[24];
-//   bool     lightOn;
-
-//   unsigned long lastSend;  // millis of last TX
-//   uint8_t attempts;        // how many times sent
-//   bool active;             // has a valid command
-//   bool done;               // completed (ACKed or failed)
-// };
-
-// PendingCommand cmdQueue[MAX_PENDING];
-// int currentCmdIndex = -1;
-// uint16_t nextCmdId = 1;
 
 void initPendingQueue() {
   for (int i = 0; i < MAX_PENDING; i++) {
@@ -311,14 +340,9 @@ void initPendingQueue() {
   currentCmdIndex = -1;
 }
 
-uint16_t allocateCmdId() {
-  uint16_t id = nextCmdId++;
-  if (nextCmdId == 0) nextCmdId = 1; // avoid 0
-  return id;
-}
-
 // Called from MQTT handler
 void enqueuePendingCommand(const JsonDocument& doc) {
+  
   const char* nodeId = doc["nodeId"] | "";
   const char* action = doc["action"] | "";
 
@@ -332,8 +356,7 @@ void enqueuePendingCommand(const JsonDocument& doc) {
       PendingCommand &c = cmdQueue[i];
       c.active = true;
       c.done = false;
-
-      c.cmdId = allocateCmdId();
+      c.cmdId = doc["cmdId"]; 
       memset(c.nodeId, 0, sizeof(c.nodeId));
       strncpy(c.nodeId, nodeId, sizeof(c.nodeId)-1);
       c.lightOn = (strcasecmp(action, "ON") == 0);
@@ -362,21 +385,19 @@ void sendCommand(PendingCommand &c) {
   c.lastSend = millis();
   c.attempts++;
 
-  Serial.printf("[CMD] Sent cmdId=%u → node=%s try=%d\n",
-                c.cmdId, c.nodeId, c.attempts);
+  Serial.printf("[CMD] Sent cmdId=%u → node=%s try=%d\n", c.cmdId, c.nodeId, c.attempts);
 }
 
 // Called from LoRa receive path when ACK is parsed
 void handleAck(const AckPkt &ack) {
-  Serial.printf("[ACK] Received ack cmdId=%u from %s\n",
-                ack.cmdId, ack.nodeId);
+  Serial.printf("[ACK] Received ack cmdId=%u from %s\n", ack.cmdId, ack.nodeId);
+  bool matched = false;
 
   // First prefer the current in-flight command
   if (currentCmdIndex >= 0) {
     PendingCommand &c = cmdQueue[currentCmdIndex];
     if (c.active && !c.done && c.cmdId == ack.cmdId) {
-      Serial.printf("[CMD] ACK matched in-flight cmdId=%u (node=%s)\n",
-                    c.cmdId, c.nodeId);
+      Serial.printf("[CMD] ACK matched in-flight cmdId=%u (node=%s)\n", c.cmdId, c.nodeId);
       c.done = true;
       c.active = false;
       currentCmdIndex = -1;
@@ -388,8 +409,7 @@ void handleAck(const AckPkt &ack) {
   for (int i = 0; i < MAX_PENDING; i++) {
     PendingCommand &c = cmdQueue[i];
     if (c.active && !c.done && c.cmdId == ack.cmdId) {
-      Serial.printf("[CMD] ACK matched queued cmdId=%u (node=%s)\n",
-                    c.cmdId, c.nodeId);
+      Serial.printf("[CMD] ACK matched queued cmdId=%u (node=%s)\n", c.cmdId, c.nodeId);
       c.done = true;
       c.active = false;
       if (currentCmdIndex == i) currentCmdIndex = -1;
