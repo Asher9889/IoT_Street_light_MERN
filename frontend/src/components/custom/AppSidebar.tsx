@@ -44,9 +44,7 @@ export function AppSidebar() {
           </div>
         </SidebarHeader>
         <SidebarGroup>
-          <SidebarGroupLabel className="bg-gray-200 font-bold">
-            Platform{" "}
-          </SidebarGroupLabel>
+          <SidebarGroupLabel className="font-bold">Platform</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems
