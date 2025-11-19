@@ -8,8 +8,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex min-h-screen w-full">
         <AppSidebar />
         <main className="flex-1 p-4">
-          <SidebarTrigger />
-          <AppBreadcrumbs />
+          <div className="flex items-center gap-4 mb-4">
+            <SidebarTrigger />
+            <AppBreadcrumbs />
+          </div>
           {children}
         </main>
       </div>

@@ -1,10 +1,5 @@
 import { Home, FileText, Plus } from "lucide-react";
-// import Dashboard from "./pages/Dashboard";
 import Dashboard from "./pages/dashboard";
-// import { AllBlogs, CreateBlog, Blog, EditBlog  } from "./pages";
-
-// export const lazyPage = (path: string) =>
-//   lazy(() => import(`../pages/${path}`).then((m) => ({ default: m.default })));
 
 export const navItems = [
   {
@@ -24,35 +19,35 @@ export const navItems = [
     children: [
       {
         name: "Zone",
-        path: "/zone",
+        path: "/master/zone",
         icon: Home,
         element: Dashboard,
         skip: false,
       },
       {
         name: "ward",
-        path: "/ward",
+        path: "/master/ward",
         icon: Home,
         element: Dashboard,
         skip: false,
       },
       {
         name: "Area",
-        path: "/area",
+        path: "/master/area",
         icon: Home,
         element: Dashboard,
         skip: false,
       },
       {
         name: "state",
-        path: "/state",
+        path: "/master/state",
         icon: Home,
         element: Dashboard,
         skip: false,
       },
       {
         name: "city",
-        path: "/city",
+        path: "/master/city",
         icon: Home,
         element: Dashboard,
         skip: false,
@@ -67,7 +62,6 @@ export const navItems = [
     element: Dashboard, //AllBlogs,
     skip: false,
     children: [
-      // { name: "All Blogs", path: "/blogs", element: NotFound,},
       {
         name: "Create Blog",
         path: "/blogs/create",

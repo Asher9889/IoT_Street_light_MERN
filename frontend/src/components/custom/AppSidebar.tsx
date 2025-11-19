@@ -1,16 +1,8 @@
-import {
-  Calendar,
-  ChevronRight,
-  Home,
-  Inbox,
-  Search,
-  Settings,
-} from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Sidebar } from "./../ui/sidebar";
 import {
-  // Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
@@ -21,39 +13,12 @@ import {
   SidebarMenuSubItem,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarHeader,
 } from "@/components/ui/sidebar";
 import { navItems } from "@/routes";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import React from "react";
-
-// Menu items.
-const items = [
-  {
-    title: "Home",
-    url: "/home",
-    icon: Home,
-  },
-  {
-    title: "Inbox",
-    url: "/inbox",
-    icon: Inbox,
-  },
-  {
-    title: "Calendar",
-    url: "/calender",
-    icon: Calendar,
-  },
-  {
-    title: "Search",
-    url: "/search",
-    icon: Search,
-  },
-  {
-    title: "Settings",
-    url: "/settings",
-    icon: Settings,
-  },
-];
+import { FaLightbulb } from "react-icons/fa";
 
 export function AppSidebar() {
   const [openMenus, setOpenMenus] = React.useState<Record<string, boolean>>({});
@@ -66,23 +31,20 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarContent>
+        <SidebarHeader>
+          <div className="flex items-center gap-2 px-2 py-1">
+            <FaLightbulb className="size-6 shrink-0 text-blue-700" />
+            {/* This hides ONLY text when collapsed */}
+            <span className="group-data-[collapsible=icon]:hidden font-bold">
+              PollManagement
+            </span>
+          </div>
+        </SidebarHeader>
         <SidebarGroup>
           <SidebarGroupLabel className="bg-gray-200 font-bold">
-            Poll Management{" "}
+            Platform{" "}
           </SidebarGroupLabel>
           <SidebarGroupContent>
-            {/* <SidebarMenu>
-              {items.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <a href={item.url}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu> */}
             <SidebarMenu>
               {navItems
                 //@ts-ignore

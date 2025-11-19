@@ -1,4 +1,3 @@
-// components/Breadcrumbs.tsx
 import { useLocation, Link } from "react-router-dom";
 import {
   Breadcrumb,
@@ -22,7 +21,7 @@ export default function AppBreadcrumbs() {
   );
 
   return (
-    <Breadcrumb className="mb-4">
+    <Breadcrumb className="">
       <BreadcrumbList>
         {/* Home */}
         <BreadcrumbItem>
