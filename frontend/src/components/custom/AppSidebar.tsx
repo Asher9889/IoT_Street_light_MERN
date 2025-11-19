@@ -14,7 +14,10 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarHeader,
+  SidebarFooter,
 } from "@/components/ui/sidebar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+
 import { navItems } from "@/routes";
 import { NavLink } from "react-router-dom";
 import React from "react";
@@ -65,6 +68,20 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter>
+        <div className="flex items-center gap-2 px-2 py-2">
+          <Avatar>
+            <AvatarImage src="https://tse1.mm.bing.net/th/id/OIP.svvjaw8Y6vlNJug9ET2v_AHaHa?pid=Api&P=0&h=180" />
+            <AvatarFallback>MR</AvatarFallback>
+          </Avatar>
+
+          {/* Hide text when collapsed */}
+          <div className="group-data-[collapsible=icon]:hidden">
+            <p className="text-sm font-medium">Mohit Rajpoot</p>
+            <p className="text-xs text-muted-foreground">Admin</p>
+          </div>
+        </div>
+      </SidebarFooter>
     </Sidebar>
   );
 }
