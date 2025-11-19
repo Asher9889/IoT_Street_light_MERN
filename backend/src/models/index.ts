@@ -3,5 +3,5 @@ import Gateway, { IGateway } from "./gateway.model";
 import Node, { INode } from "./node.model";
 import Counter from "./counter.model";
 import GatewayLog from "./gatewayLogs.model";
-
-export { Device, IDeviceSchema, Gateway, IGateway, Node, INode, Counter, GatewayLog }
+import CommandLog from "./commandLog";
+export { Device, IDeviceSchema, Gateway, IGateway, Node, INode, Counter, GatewayLog, CommandLog }

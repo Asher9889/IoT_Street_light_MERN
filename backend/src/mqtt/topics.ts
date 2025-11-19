@@ -1,6 +1,6 @@
 import { logger } from "../logger";
 import { getMQTTClient } from "./client";
-import { extractDeviceIdFromTopic, handleGatewayBootstrapConfig, handleGatewayConfigSet, handleGatewayRegistration, handleGatewayStatus, handleNodeAck } from "./index";
+import { extractDeviceIdFromTopic, handleGatewayBootstrapConfig, handleGatewayConfigSet, handleGatewayRegistration, handleGatewayStatus, handleNodeAck, handleNodeControlAck, identifyTopicType } from "./index";
 import { extractGatewayIdFromTopic } from "./utils/extractDeviceIdFromTopic";
 
 export function subscribeGatewayTopics() {
@@ -15,20 +15,19 @@ export function subscribeGatewayTopics() {
   // for node config ack
   client.subscribe("iot/gateway/+/node/+/config/ack", { qos: 1 });
 
+  // for node control ack
+  client.subscribe("iot/gateway/+/node/+/control/ack", { qos: 1 });
+
+  //topic = "iot/gateway/" + GATEWAY_ID +
+              //"/node/" + String(evt.nodeId) + "/control/ack";
+
 
   client.on("message", async (topic, message: Buffer) => {
 
-    console.log("[MQTT] Received:", topic, message.toString());
-    const parts = topic.split("/");
-
-    if (parts.length < 3 || parts[0] !== "iot" || parts[1] !== "gateway") return;
-
-    const gatewayId = parts[2];
-    const action = parts[parts.length - 1]; // last segment (e.g., register, status, ack)
-
+    const t = identifyTopicType(topic);
 
     // --- Gateway registration ---
-    if (parts.length === 4 && action === "register") {
+    if (t.isGatewayRegister) {
       const deviceId = extractDeviceIdFromTopic(topic);
       const gatewayId = await handleGatewayRegistration(message);
       if (!gatewayId) return;
@@ -38,7 +37,7 @@ export function subscribeGatewayTopics() {
     }
 
     // --- Gateway Status/ TELEMETRY ---
-    if (parts.length === 4 && action === "status") {
+    if (t.isGatewayStatus) {
       handleGatewayStatus(topic, message);
       return;
     }
@@ -46,15 +45,21 @@ export function subscribeGatewayTopics() {
     /**
      * NODE REGISTRATION
      */
-    if (parts.includes("node") && action === "register") {
+    if (t.isNodeRegister) {
       console.log("[NODE_REGISTER] Node registration topic:", topic);
       await handleGatewayConfigSet(topic, message);
       return;
     }
 
     // --- Node config ack --- 
-    if (parts.includes("node") && action === "ack") {
+    if (t.isNodeConfigAck) {
       await handleNodeAck(topic, message);
+      return;
+    }
+
+    // --- Node control ack ---
+    if (t.isNodeControlAck) {
+      await handleNodeControlAck(topic, message); // "type":"node_control_ack"
       return;
     }
 

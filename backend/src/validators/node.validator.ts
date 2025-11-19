@@ -1,5 +1,5 @@
 import Joi from "joi";
-import { MODE, STATUS } from "../constant";
+import { LIGHT_STATE, MODE, STATUS } from "../constant";
 import { INode } from "../models";
 import { ApiErrorResponse } from "../utils";
 import { StatusCodes } from "http-status-codes";
@@ -35,6 +35,13 @@ const nodeSchema = Joi.object({
   status: Joi.string()
     .valid(...Object.values(STATUS))
     .default(STATUS.OFFLINE),
+
+  lightState:{
+    status: Joi.string()
+    .valid(...Object.values(LIGHT_STATE))
+    .default(LIGHT_STATE.OFF),
+    updatedAt: Joi.date().default(null),
+  },
 
   lastSeen: Joi.date().optional().allow(null),
 

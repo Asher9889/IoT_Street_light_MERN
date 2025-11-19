@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document, Model, Types } from "mongoose";
 import { STATUS, Status } from "../constant";
 import { MODE, Mode  } from "../constant";  // mode => type
-
+import { TLightState, LIGHT_STATE } from "../constant";
 export interface INode extends Document {
   _id: Types.ObjectId;
   nodeId: string;
@@ -9,6 +9,7 @@ export interface INode extends Document {
   name: string;
   macAddress: string;
   status: Status;
+  lightState: TLightState;
   lastSeen: Date;
   config: {
     onHour: number;
@@ -40,6 +41,14 @@ const NodeSchema = new Schema<INode>(
       type: String,
       enum: Object.values(STATUS), // ["ONLINE", "OFFLINE"]
       default: STATUS.OFFLINE,
+    },
+    lightState: {
+      status: {
+        type: String,
+        enum: Object.values(LIGHT_STATE), // ["ON", "OFF"]
+        default: LIGHT_STATE.OFF,
+      },
+      updatedAt: { type: Date, default: null },
     },
     lastSeen: { type: Date, default: null },
     config: {

@@ -1,3 +1,3 @@
-import { IControlNode } from "./node.interface";
+import { IControlNode, INodeControlAck } from "./node.interface";
 
-export { IControlNode }
+export { IControlNode, INodeControlAck }

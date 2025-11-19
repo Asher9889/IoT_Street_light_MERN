@@ -393,31 +393,44 @@ void handleAck(const AckPkt &ack) {
   Serial.printf("[ACK] Received ack cmdId=%u from %s\n", ack.cmdId, ack.nodeId);
   bool matched = false;
 
-  // First prefer the current in-flight command
+  // 1) First prefer the current in-flight command
   if (currentCmdIndex >= 0) {
     PendingCommand &c = cmdQueue[currentCmdIndex];
-    if (c.active && !c.done && c.cmdId == ack.cmdId) {
+    if (c.active && !c.done && c.cmdId == ack.cmdId  && strncmp(c.nodeId, ack.nodeId, sizeof(c.nodeId)) == 0) {
       Serial.printf("[CMD] ACK matched in-flight cmdId=%u (node=%s)\n", c.cmdId, c.nodeId);
-      c.done = true;
+      c.done = true; 
       c.active = false;
       currentCmdIndex = -1;
-      return;
+      matched = true;
     }
   }
 
-  // Fallback: scan queue (in case timing was weird)
-  for (int i = 0; i < MAX_PENDING; i++) {
-    PendingCommand &c = cmdQueue[i];
-    if (c.active && !c.done && c.cmdId == ack.cmdId) {
-      Serial.printf("[CMD] ACK matched queued cmdId=%u (node=%s)\n", c.cmdId, c.nodeId);
-      c.done = true;
-      c.active = false;
-      if (currentCmdIndex == i) currentCmdIndex = -1;
-      return;
+   // 2) Fallback scan in case timing was weird
+  if (!matched) {
+    for (int i = 0; i < MAX_PENDING; i++) {
+      PendingCommand &c = cmdQueue[i];
+      if (c.active && !c.done &&
+          c.cmdId == ack.cmdId &&
+          strncmp(c.nodeId, ack.nodeId, sizeof(c.nodeId)) == 0) {
+
+        Serial.printf("[CMD] ACK matched queued cmdId=%u (node=%s)\n",
+                      c.cmdId, c.nodeId);
+
+        c.done   = true;
+        c.active = false;
+        if (currentCmdIndex == i) currentCmdIndex = -1;
+        matched = true;
+        break;
+      }
     }
   }
 
-  Serial.println("[ACK] No matching command found for this ACK (late or stale?)");
+  if (!matched) {
+    Serial.println("[ACK] No matching command found for this ACK (stale/duplicate?)");
+  }
+
+  // 3) Emit event into the ring buffer (for backend / higher layers)
+  pushAckEvent(ack.cmdId, ack.nodeId, matched);
 }
 
 // Called from loop()
@@ -616,6 +629,42 @@ void handleDeviceConfig(const JsonDocument& doc, const char* topic) {
 
   Serial.printf("[BOOTSTRAP] Config applied successfully for gateway %s\n", GATEWAY_ID.c_str());
 }
+
+void handleAckEvents() {
+  AckEvent evt;
+  while (popAckEvent(evt)) {
+    StaticJsonDocument<256> doc;
+    doc["type"]      = "node_control_ack";
+    doc["gatewayId"] = GATEWAY_ID;
+    doc["deviceId"]  = deviceIdStr;
+    doc["nodeId"]    = evt.nodeId;
+    doc["cmdId"]     = evt.cmdId;
+    doc["success"]   = evt.success;
+    doc["ts"]        = millis();
+
+    String topic;
+    if (GATEWAY_ID.length() > 0) {
+      topic = "iot/gateway/" + GATEWAY_ID +
+              "/node/" + String(evt.nodeId) + "/control/ack";
+    } else {
+      topic = "iot/gateway/" + deviceIdStr +
+              "/node/" + String(evt.nodeId) + "/control/ack";
+    }
+
+    String payload;
+    serializeJson(doc, payload);
+
+    if (mqtt.connected()) {
+      bool ok = mqtt.publish(topic.c_str(), payload.c_str());
+      Serial.printf("[ACK] Publish to backend cmdId=%u node=%s success=%d mqtt=%d\n",
+                    evt.cmdId, evt.nodeId, evt.success, ok);
+    } else {
+      Serial.println("[ACK] MQTT not connected, cannot publish ack event");
+      // Optionally: you could re-queue or count drops here
+    }
+  }
+}
+
 
 // ---- CONTROL ENTRY POINT from MQTT (uses queue) ----
 void controlNode(const JsonDocument& doc) {
@@ -909,6 +958,7 @@ void loop() {
   // Core LoRa + command processing
   handleLoRaReceive();
   processPendingCommands();
+  handleAckEvents(); // process event ack
 
   // Periodic beacon
   if (millis() - lastBeacon >= BEACON_INTERVAL) {
